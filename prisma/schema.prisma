@@ -43,6 +43,7 @@ enum InboxStatus {
   investigating
   rejected
   used
+  archived // older than the backlog window when first collected
 }
 
 enum VerificationStatus {

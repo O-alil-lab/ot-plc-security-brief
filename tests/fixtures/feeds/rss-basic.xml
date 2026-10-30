@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Fixture ICS</title><link>https://example.com</link><description>d</description>
+<item><title>Example Vendor PLC firmware vulnerability</title><link>https://www.cisa.gov/news-events/ics-advisories/icsa-26-300-01</link><guid isPermaLink="false">ICSA-26-300-01</guid><pubDate>Tue, 27 Oct 2026 12:00:00 GMT</pubDate><description>Affects SCADA HMI. CVE-2026-11111.</description></item>
+<item><title>Item without a date</title><link>https://example.com/no-date</link><description>No pubDate here.</description></item>
+</channel></rss>

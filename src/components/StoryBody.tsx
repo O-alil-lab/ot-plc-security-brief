@@ -1,0 +1,126 @@
+import type { CollectedItem, Source, Story } from "@prisma/client";
+import { VerificationLamp, DemoBadge } from "./Lamp";
+import { fmtDate } from "@/lib/queries";
+
+type StoryWithSources = Story & {
+  sources: { item: CollectedItem & { source: Source; revisions?: { detectedAt: Date }[] } }[];
+};
+
+function Paragraphs({ text }: { text: string }) {
+  return (
+    <>
+      {text
+        .split(/\n{2,}/)
+        .filter((p) => p.trim())
+        .map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+    </>
+  );
+}
+
+/** Public story rendering. Shared by the public page and the admin preview. All text is rendered as text (never HTML). */
+export function StoryBody({ story, kev = [], preview = false }: { story: StoryWithSources; kev?: string[]; preview?: boolean }) {
+  const trustLabel = (t: Source["trustLevel"]) =>
+    ({ primary_vendor: "Vendor advisory", government_cert: "Government CERT", research: "Research", news: "News", social: "Social post (unverified)", community: "Community submission" })[t];
+  // Only edits made after publication count as an update (corrections).
+  const updated = story.publishedAt && story.updatedAt.getTime() - Math.max(story.publishedAt.getTime(), story.createdAt.getTime()) > 60_000;
+
+  return (
+    <article className="mt-4 grid gap-10 lg:grid-cols-[1fr_20rem]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <VerificationLamp status={story.verificationStatus} />
+          {story.isDemo && <DemoBadge />}
+          {kev.length > 0 && (
+            <span className="rounded border border-danger/30 bg-red-50 px-2 py-0.5 text-xs font-semibold text-danger" title="Listed in the CISA Known Exploited Vulnerabilities catalog">
+              Listed in CISA KEV: {kev.join(", ")}
+            </span>
+          )}
+        </div>
+        <h1 className="mt-3 max-w-[30ch] text-3xl font-bold sm:text-4xl">{story.headline}</h1>
+        <p className="mt-3 text-sm text-slate">
+          {preview && !story.publishedAt ? "Not yet published" : <>Published {fmtDate(story.publishedAt)}</>}
+          {updated && <> — updated {fmtDate(story.updatedAt)}</>}
+        </p>
+
+        <div className="prose-brief mt-6 text-[1.05rem]">
+          {story.summary ? <Paragraphs text={story.summary} /> : <p className="italic text-slate">No summary written yet.</p>}
+        </div>
+
+        {story.whyItMatters && (
+          <section className="mt-8">
+            <h2 className="text-xl font-semibold">Why it matters</h2>
+            <div className="prose-brief mt-2"><Paragraphs text={story.whyItMatters} /></div>
+          </section>
+        )}
+
+        {story.defensiveGuidance && (
+          <section className="mt-8 rounded-lg border border-line bg-panel p-5">
+            <h2 className="text-xl font-semibold">Defensive guidance</h2>
+            {story.guidanceSource && <p className="mt-1 text-sm text-slate">According to {story.guidanceSource}:</p>}
+            <div className="prose-brief mt-2"><Paragraphs text={story.defensiveGuidance} /></div>
+          </section>
+        )}
+
+        <p className="mt-8 max-w-[68ch] rounded-md border-l-4 border-lamp-amber bg-amber-50 px-4 py-3 text-sm text-ink">
+          Follow the vendor&apos;s guidance and your organisation&apos;s change-management and safety processes before changing any industrial system. Test mitigations outside production first where you can.
+        </p>
+      </div>
+
+      <aside className="space-y-6 text-sm">
+        <dl className="space-y-3 rounded-lg border border-line p-4">
+          <div>
+            <dt className="font-medium">Vendor</dt>
+            <dd className="text-slate">{story.vendors.length ? story.vendors.join(", ") : "Not specified"}</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Affected products</dt>
+            <dd className="text-slate">{story.products.length ? story.products.join(", ") : "Not specified"}</dd>
+          </div>
+          <div>
+            <dt className="font-medium">Affected versions</dt>
+            <dd className="text-slate">{story.affectedVersions ?? "Unknown"}</dd>
+          </div>
+          {(story.cveIds.length > 0 || story.advisoryIds.length > 0) && (
+            <div>
+              <dt className="font-medium">Identifiers</dt>
+              <dd>
+                <ul className="mt-1 flex flex-wrap gap-1.5">
+                  {story.cveIds.map((id) => (
+                    <li key={id}>
+                      <a href={`https://www.cve.org/CVERecord?id=${encodeURIComponent(id)}`} rel="noopener noreferrer" className="rounded border border-line px-2 py-0.5 text-xs no-underline">{id}</a>
+                    </li>
+                  ))}
+                  {story.advisoryIds.map((id) => (
+                    <li key={id} className="rounded border border-line px-2 py-0.5 text-xs">{id}</li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <section>
+          <h2 className="text-lg font-semibold">Original sources</h2>
+          <ul className="mt-2 space-y-3">
+            {story.sources.map(({ item }) => (
+              <li key={item.id} className="border-l-2 border-line pl-3">
+                {item.url ? (
+                  <a href={item.url} rel="noopener noreferrer nofollow" target="_blank" className="font-medium">{item.source.name}</a>
+                ) : (
+                  <span className="font-medium">{item.source.name}</span>
+                )}
+                <p className="text-slate">{trustLabel(item.source.trustLevel)} — published {fmtDate(item.publishedAt)}</p>
+                {(item.sourceUpdatedAt || (item.revisions && item.revisions.length > 0)) && (
+                  <p className="text-slate">Source updated {fmtDate(item.sourceUpdatedAt ?? item.revisions?.at(-1)?.detectedAt)}</p>
+                )}
+                <p className="mt-0.5 text-slate">{item.title}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </aside>
+    </article>
+  );
+}

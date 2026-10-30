@@ -1,0 +1,67 @@
+# Local development:
+#   docker compose up -d                  -> PostgreSQL only (then: npm run dev / npm run worker)
+#   docker compose --profile mail up -d   -> + Mailpit (SMTP on 1025, web UI on http://localhost:8025)
+#   docker compose --profile app up -d --build -> + the app (http://localhost:3000) and the worker
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: brief
+      POSTGRES_PASSWORD: brief
+      POSTGRES_DB: brief
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brief -d brief"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mail", "app"]
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  app:
+    build: .
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://brief:brief@db:5432/brief
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    command: sh -c "npx prisma migrate deploy && npx tsx scripts/seed.ts && npm run start"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  worker:
+    build: .
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://brief:brief@db:5432/brief
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    command: sh -c "sleep 10 && npm run worker"
+
+volumes:
+  pgdata:

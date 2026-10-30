@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>HTML</title>
+<item><title><![CDATA[<b>Siemens</b> SIMATIC <i>alert</i>]]></title><link>javascript:alert(1)</link><guid>html-1</guid><description><![CDATA[<p>Text<script>alert(1)</script><img src=x onerror=alert(2)></p>]]></description></item>
+</channel></rss>

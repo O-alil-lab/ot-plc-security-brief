@@ -22,7 +22,7 @@ export function toPlainText(input: string | null | undefined, maxLength = 2000):
 export function sanitizeRichHtml(input: string): string {
   return sanitizeHtml(input, {
     allowedTags: ["p", "br", "strong", "em", "b", "i", "ul", "ol", "li", "a", "code", "pre", "blockquote"],
-    allowedAttributes: { a: ["href", "title"] },
+    allowedAttributes: { a: ["href", "title", "rel", "target"] },
     allowedSchemes: ["http", "https", "mailto"],
     allowProtocolRelative: false,
     transformTags: {

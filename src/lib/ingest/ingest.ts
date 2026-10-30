@@ -17,6 +17,8 @@ export type RunResult = {
 };
 
 export const MIN_POLL_MINUTES = 30;
+/** Items already older than this when first collected skip the review queue. */
+export const BACKLOG_DAYS = 30;
 const MAX_BACKOFF_MINUTES = 24 * 60;
 
 /** Next time a source is due, with exponential backoff after failures. */
@@ -30,7 +32,7 @@ export function nextDueAt(source: Pick<Source, "lastAttemptAt" | "pollIntervalMi
 
 async function findDuplicateCandidate(
   tx: Prisma.TransactionClient,
-  item: { id: string; canonicalUrl: string | null; title: string; extractedIds: string[] },
+  item: { id: string; sourceId: string; canonicalUrl: string | null; title: string; extractedIds: string[] },
 ): Promise<{ match: CollectedItem | null; reason: string | null; suggestions: string[] }> {
   if (item.canonicalUrl) {
     const sameUrl = await tx.collectedItem.findFirst({
@@ -42,16 +44,21 @@ async function findDuplicateCandidate(
   const since = new Date(Date.now() - 21 * 86_400_000);
   const recent = await tx.collectedItem.findMany({
     where: { collectedAt: { gte: since }, id: { not: item.id } },
-    select: { id: true, title: true, extractedIds: true, duplicateGroupId: true },
+    select: { id: true, sourceId: true, title: true, extractedIds: true, duplicateGroupId: true },
     orderBy: { collectedAt: "desc" },
     take: 500,
   });
   let best: { id: string; score: number } | null = null;
   const suggestions: string[] = [];
   for (const r of recent) {
-    const sim = headlineSimilarity(item.title, r.title);
+    const sharesId = item.extractedIds.length > 0 && r.extractedIds.some((x) => item.extractedIds.includes(x));
+    // Headline similarity only groups items from DIFFERENT sources, and never
+    // when both carry identifiers that don't overlap (e.g. two separate
+    // advisories with near-identical titles, or recurring bulletins).
+    const idsConflict = item.extractedIds.length > 0 && r.extractedIds.length > 0 && !sharesId;
+    const sim = r.sourceId === item.sourceId || idsConflict ? 0 : headlineSimilarity(item.title, r.title);
     if (sim >= DUPLICATE_SIMILARITY_THRESHOLD && (!best || sim > best.score)) best = { id: r.id, score: sim };
-    else if (item.extractedIds.length && r.extractedIds.some((x) => item.extractedIds.includes(x))) {
+    else if (sharesId) {
       // Shared CVE/advisory ID is only a signal: suggest, never auto-merge.
       suggestions.push(r.id);
     }
@@ -122,7 +129,9 @@ export async function upsertItems(source: Source, parsed: ParsedItem[], now = ne
           relevanceScore: relevance.total,
           relevanceBreakdown: relevance as unknown as Prisma.InputJsonValue,
           isDemo: source.isDemo,
-          socialMeta: undefined,
+          // Old back-catalogue entries (e.g. a vendor feed's full history) are kept
+          // for search and deduplication but don't flood the review queue.
+          inboxStatus: p.publishedAt && now.getTime() - p.publishedAt.getTime() > BACKLOG_DAYS * 86_400_000 && !source.isDemo ? "archived" : "new",
         },
       });
       itemsNew++;

@@ -47,10 +47,9 @@ export function repairXml(xml: string): string {
   return (
     xml
       // strip BOM and anything before the XML declaration / root
-      .replace(/^﻿/, "")
+      .replace(/^\uFEFF/, "")
       .replace(/^[\s\S]*?(?=<\?xml|<rss|<feed|<rdf:RDF)/i, "")
       // remove control characters illegal in XML 1.0
-      // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
       // escape bare ampersands
       .replace(/&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")

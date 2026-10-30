@@ -1,0 +1,47 @@
+import Link from "next/link";
+import { VerificationLamp, DemoBadge } from "./Lamp";
+import { fmtDate, originalDate, type StoryListItem } from "@/lib/queries";
+
+/** One story in the log-style list: date rail on the left, content on the right. */
+export function StoryRow({ story }: { story: StoryListItem }) {
+  const sources = [...new Set(story.sources.map((s) => s.item.source.name))];
+  const ids = [...story.cveIds, ...story.advisoryIds];
+  return (
+    <article className="grid gap-x-6 gap-y-1 border-t border-line py-5 sm:grid-cols-[8.5rem_1fr]">
+      <div className="text-sm text-slate">
+        <time dateTime={story.publishedAt?.toISOString()}>{fmtDate(story.publishedAt)}</time>
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <VerificationLamp status={story.verificationStatus} compact />
+          {story.isDemo && <DemoBadge />}
+        </div>
+        <h3 className="text-xl font-semibold">
+          <Link href={`/stories/${story.slug}`} className="text-ink no-underline hover:underline">
+            {story.headline}
+          </Link>
+        </h3>
+        {story.summary && <p className="mt-1.5 line-clamp-3 max-w-[68ch] text-[0.95rem] text-slate">{story.summary}</p>}
+        <p className="mt-2 text-sm text-slate">
+          Source{sources.length > 1 ? "s" : ""}: {sources.join(", ")}
+          {originalDate(story) && <> — originally published {fmtDate(originalDate(story))}</>}
+        </p>
+        {(story.vendors.length > 0 || ids.length > 0) && (
+          <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Vendors and identifiers">
+            {story.vendors.map((v) => (
+              <li key={v} className="rounded bg-panel px-2 py-0.5 text-xs text-ink-2">
+                {v}
+              </li>
+            ))}
+            {ids.slice(0, 4).map((id) => (
+              <li key={id} className="rounded border border-line px-2 py-0.5 text-xs text-ink-2">
+                {id}
+              </li>
+            ))}
+            {ids.length > 4 && <li className="px-1 text-xs text-slate">+{ids.length - 4} more</li>}
+          </ul>
+        )}
+      </div>
+    </article>
+  );
+}

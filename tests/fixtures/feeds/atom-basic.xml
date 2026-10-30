@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Fixture Atom</title><id>urn:fixture</id><updated>2026-10-20T00:00:00Z</updated>
+<entry><title>SSA-111111: Vulnerability in SIMATIC S7-1500</title><id>urn:ssa:SSA-111111</id><link href="https://cert-portal.siemens.com/productcert/html/ssa-111111.html"/><published>2026-10-01T00:00:00Z</published><updated>2026-10-20T00:00:00Z</updated><summary>Siemens has released updates.</summary></entry>
+</feed>

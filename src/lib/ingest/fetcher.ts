@@ -44,7 +44,7 @@ export type SafeFetchResult = {
   contentType?: string;
 };
 
-const DEFAULTS = { timeoutMs: 15_000, maxBytes: 5 * 1024 * 1024, maxRedirects: 3, retries: 1 };
+const DEFAULTS = { timeoutMs: 20_000, maxBytes: 15 * 1024 * 1024, maxRedirects: 3, retries: 1 };
 
 function pinnedAgent(address: string, family: number): Agent {
   const lookup: LookupFunction = (_hostname, options, callback) => {
