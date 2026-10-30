@@ -25,8 +25,13 @@ const isWin = process.platform === "win32";
 
 const log = (msg: string) => console.log(`\x1b[36m[local]\x1b[0m ${msg}`);
 
+/** Windows needs a shell to find npx.cmd; pass one command string there (avoids Node's DEP0190 warning). */
+function spawnArgs(cmd: string, args: string[]): [string, string[]] {
+  return isWin ? [[cmd, ...args].join(" "), []] : [cmd, args];
+}
+
 function run(cmd: string, args: string[], env: NodeJS.ProcessEnv) {
-  const r = spawnSync(cmd, args, { cwd: ROOT, env, stdio: "inherit", shell: isWin });
+  const r = spawnSync(...spawnArgs(cmd, args), { cwd: ROOT, env, stdio: "inherit", shell: isWin });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed (exit ${r.status})`);
 }
 
@@ -106,6 +111,8 @@ async function main() {
   process.on("SIGTERM", () => void stop());
 
   try {
+    log("Preparing the database client...");
+    run("npx", ["prisma", "generate"], env);
     log("Applying database migrations...");
     run("npx", ["prisma", "migrate", "deploy"], env);
     run("npx", ["tsx", "scripts/seed.ts"], env);
@@ -115,7 +122,7 @@ async function main() {
       run("npx", ["tsx", "scripts/seed-demo.ts"], env);
       const email = "admin@localhost.test";
       const password = randomBytes(12).toString("base64url");
-      const res = spawnSync("npx", ["tsx", "scripts/admin-create.ts", "--if-missing"], {
+      const res = spawnSync(...spawnArgs("npx", ["tsx", "scripts/admin-create.ts", "--if-missing"]), {
         cwd: ROOT,
         env: { ...env, ADMIN_EMAIL: email, ADMIN_PASSWORD: password },
         encoding: "utf8",
@@ -140,8 +147,8 @@ async function main() {
   log(`Starting the web app on http://localhost:${APP_PORT} and the background worker...`);
   // On macOS/Linux each child gets its own process group so stop() can end its whole tree.
   const opts = { cwd: ROOT, env, stdio: "inherit" as const, shell: isWin, detached: !isWin };
-  const web = spawn("npx", ["next", "dev", "-p", String(APP_PORT)], opts);
-  const worker = spawn("npx", ["tsx", "scripts/worker.ts"], opts);
+  const web = spawn(...spawnArgs("npx", ["next", "dev", "-p", String(APP_PORT)]), opts);
+  const worker = spawn(...spawnArgs("npx", ["tsx", "scripts/worker.ts"]), opts);
   children.push(web, worker);
   web.on("exit", (code) => {
     if (!stopping) {
