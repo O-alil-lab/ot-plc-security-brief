@@ -46,3 +46,6 @@ next-env.d.ts
 /test-results
 /playwright-report
 *.csv
+
+# npm run local (bundled database, generated admin login)
+/.local

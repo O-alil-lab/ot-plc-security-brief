@@ -90,6 +90,28 @@ tests/             unit/, integration/, e2e/, fixtures/feeds/
 
 ## Quick start (local)
 
+**Easiest: one command, no database install.** With Node.js 20.11 or newer installed:
+
+```bash
+npm install
+npm run local
+```
+
+On Windows you can double-click `start-local.cmd` instead.
+
+`npm run local` does the following:
+
+- starts a bundled PostgreSQL (data kept in `.local/`);
+- creates `.env`;
+- applies migrations, adds the sources and the DEMO stories;
+- creates an admin, with the sign-in saved to `.local/ADMIN-LOGIN.txt`;
+- runs the site at http://localhost:3000 and the background worker.
+
+Press Ctrl+C to stop.
+
+**Manual setup** (your own PostgreSQL or Docker):
+
+
 ```bash
 git clone <your repo> ot-plc-security-brief && cd ot-plc-security-brief
 npm install

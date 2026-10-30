@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
-    "start:hosted": "prisma migrate deploy && tsx scripts/seed.ts && (tsx scripts/admin-create.ts --if-missing || echo \"[start] admin bootstrap failed; see message above\") && next start"
+    "start:hosted": "prisma migrate deploy && tsx scripts/seed.ts && (tsx scripts/admin-create.ts --if-missing || echo \"[start] admin bootstrap failed; see message above\") && next start",
+    "local": "tsx scripts/local.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
@@ -44,6 +45,7 @@
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.2",
     "dotenv": "^18.0.9",
+    "embedded-postgres": "^16.15.0-beta.19",
     "eslint": "^9",
     "eslint-config-next": "^16.4.3",
     "prettier": "^3.9.10",
