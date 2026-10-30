@@ -7,7 +7,7 @@ import { Csrf } from "@/components/admin/Csrf";
 import { PageTitle, fmtDateTime } from "@/components/admin/ui";
 import { DemoBadge } from "@/components/Lamp";
 import type { RelevanceBreakdown } from "@/lib/ingest/relevance";
-import { createStoryAction, setItemStatusAction, splitItemAction } from "../../../actions";
+import { createStoryAction, investigateItemsAction, rejectItemsAction, restoreItemsAction, splitItemAction } from "../../../actions";
 
 export default async function ItemPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: FlashParams }) {
   await requireAdminPage();
@@ -47,9 +47,9 @@ export default async function ItemPage({ params, searchParams }: { params: Promi
         <input type="hidden" name="itemId" value={item.id} />
         <input type="hidden" name="returnTo" value={self} />
         <button formAction={createStoryAction} className="btn btn-primary">Create draft story</button>
-        <button formAction={setItemStatusAction} name="status" value="investigating" className="btn btn-secondary">Investigate</button>
-        <button formAction={setItemStatusAction} name="status" value="rejected" className="btn btn-danger">Reject</button>
-        {item.inboxStatus !== "new" && <button formAction={setItemStatusAction} name="status" value="new" className="btn btn-secondary">Back to new</button>}
+        <button formAction={investigateItemsAction} className="btn btn-secondary">Investigate</button>
+        <button formAction={rejectItemsAction} className="btn btn-danger">Reject</button>
+        {item.inboxStatus !== "new" && <button formAction={restoreItemsAction} className="btn btn-secondary">Back to new</button>}
       </form>
 
       <div className="grid gap-8 xl:grid-cols-[1fr_20rem]">

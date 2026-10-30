@@ -7,7 +7,7 @@ import { Flash, type FlashParams } from "@/components/admin/Flash";
 import { Csrf } from "@/components/admin/Csrf";
 import { PageTitle, Empty, ago } from "@/components/admin/ui";
 import { DemoBadge } from "@/components/Lamp";
-import { createStoryAction, setItemStatusAction, groupItemsAction } from "../../actions";
+import { createStoryAction, investigateItemsAction, rejectItemsAction, restoreItemsAction, groupItemsAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Inbox" };
 const PAGE = 40;
@@ -107,10 +107,10 @@ export default async function InboxPage({ searchParams }: { searchParams: FlashP
           <div className="sticky top-0 z-10 -mx-1 mb-2 flex flex-wrap items-center gap-2 bg-white px-1 py-2 text-sm">
             <span className="text-slate">With selected:</span>
             <button formAction={createStoryAction} className="btn btn-primary">Create draft story</button>
-            <button formAction={setItemStatusAction} name="status" value="investigating" className="btn btn-secondary">Investigate</button>
+            <button formAction={investigateItemsAction} className="btn btn-secondary">Investigate</button>
             <button formAction={groupItemsAction} className="btn btn-secondary">Group as duplicates</button>
-            <button formAction={setItemStatusAction} name="status" value="rejected" className="btn btn-danger">Reject</button>
-            {status !== "new" && <button formAction={setItemStatusAction} name="status" value="new" className="btn btn-secondary">Back to new</button>}
+            <button formAction={rejectItemsAction} className="btn btn-danger">Reject</button>
+            {status !== "new" && <button formAction={restoreItemsAction} className="btn btn-secondary">Back to new</button>}
           </div>
           <table className="w-full text-sm">
             <caption className="sr-only">Collected items</caption>

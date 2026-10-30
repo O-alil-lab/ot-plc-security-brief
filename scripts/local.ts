@@ -6,11 +6,13 @@
  * - Creates .env on first run (random APP_SECRET, development email mode)
  * - Applies migrations, seeds the 17 sources, loads the DEMO stories on first run
  * - Creates an admin on first run and writes the sign-in to .local/ADMIN-LOGIN.txt
- * - Runs the web app (http://localhost:3000) and the background worker
+ * - Builds the app (first run, and again only when the code changes), then runs
+ *   the production server on http://localhost:3000 plus the background worker
+ *   Use `npm run local -- --dev` for development mode with hot reload instead.
  * Press Ctrl+C to stop everything cleanly. Data is kept between runs.
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import EmbeddedPostgres from "embedded-postgres";
@@ -22,6 +24,30 @@ const PG_PORT = Number(process.env.LOCAL_PG_PORT ?? 54329);
 const APP_PORT = Number(process.env.PORT ?? 3000);
 const DB_URL = `postgresql://brief:brief@localhost:${PG_PORT}/brief`;
 const isWin = process.platform === "win32";
+const DEV_MODE = process.argv.includes("--dev");
+
+/** Newest modification time among the files that affect the production build. */
+function newestSourceMtime(): number {
+  let newest = 0;
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full);
+      else newest = Math.max(newest, st.mtimeMs);
+    }
+  };
+  for (const d of ["src", "config"]) if (existsSync(join(ROOT, d))) walk(join(ROOT, d));
+  for (const f of ["next.config.ts", "package.json", "package-lock.json", "postcss.config.mjs", "prisma/schema.prisma"]) {
+    if (existsSync(join(ROOT, f))) newest = Math.max(newest, statSync(join(ROOT, f)).mtimeMs);
+  }
+  return newest;
+}
+
+function buildIsCurrent(): boolean {
+  const id = join(ROOT, ".next", "BUILD_ID");
+  return existsSync(id) && statSync(id).mtimeMs >= newestSourceMtime();
+}
 
 const log = (msg: string) => console.log(`\x1b[36m[local]\x1b[0m ${msg}`);
 
@@ -138,16 +164,23 @@ async function main() {
         log("An admin already exists. Use your existing sign-in, or reset it with: npm run admin:create");
       }
     }
+    if (!DEV_MODE && !buildIsCurrent()) {
+      log("Building the app (first run or code changed; takes a minute or two)...");
+      run("npx", ["next", "build"], { ...env, NODE_ENV: "production" });
+    }
   } catch (e) {
     console.error(`\n[local] Setup failed: ${(e as Error).message}`);
     await stop(1);
     return;
   }
 
-  log(`Starting the web app on http://localhost:${APP_PORT} and the background worker...`);
+  log(`Starting the web app${DEV_MODE ? " in development mode" : ""} on http://localhost:${APP_PORT} and the background worker...`);
   // On macOS/Linux each child gets its own process group so stop() can end its whole tree.
   const opts = { cwd: ROOT, env, stdio: "inherit" as const, shell: isWin, detached: !isWin };
-  const web = spawn(...spawnArgs("npx", ["next", "dev", "-p", String(APP_PORT)]), opts);
+  const web = spawn(
+    ...spawnArgs("npx", DEV_MODE ? ["next", "dev", "-p", String(APP_PORT)] : ["next", "start", "-p", String(APP_PORT)]),
+    DEV_MODE ? opts : { ...opts, env: { ...env, NODE_ENV: "production" } },
+  );
   const worker = spawn(...spawnArgs("npx", ["tsx", "scripts/worker.ts"]), opts);
   children.push(web, worker);
   web.on("exit", (code) => {

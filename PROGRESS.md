@@ -46,6 +46,18 @@ The end-to-end flow covers:
 - Verified locally with a production build on a fresh database. The start sequence ran migrations, seeded sources and created the admin, then a second run skipped admin creation. Health returned OK, cron rejected requests without the token, and a cron run with the token ingested 8 sources and synced KEV in 23 s. Admin sign-in worked.
 - Tests: 129 passed.
 
+## Error sweep and fixes (2026-10-30, evening)
+
+- **Fixed:** the inbox Investigate / Reject / Back to new buttons used one shared action and passed the status in the button's `name`/`value`. React replaces a button's `name` when it has its own formAction, so the status could be lost; this also caused a hydration-mismatch error. Each button now has its own action. A new e2e test covers all three.
+- **Fixed:** a fresh `npm ci` didn't generate the Prisma client, so local setup failed on Windows. A `postinstall` script now runs `prisma generate`, and `npm run local` also runs it.
+- **Changed:** `npm run local` now runs the production build: built once, rebuilt only after code changes. It is much faster and doesn't show the dev overlay; that overlay was behind the metadata hydration warning seen on the first Windows page load. `--dev` keeps hot-reload mode.
+- **Added:** a branded 404 page.
+- **Verified:**
+  - an automated sweep of 37 public and admin URLs, in dev and production builds, found 0 console errors, 0 page errors, 0 Next.js issues and 0 server errors (only intentional 404s);
+  - 131 unit and integration tests pass (2 more because the authorization test now covers the new inbox actions);
+  - 6 e2e tests pass, including review, typed confirmation and the worker sending an issue;
+  - lint, typecheck and production build pass.
+
 ## Integration status
 
 | Integration | Status |

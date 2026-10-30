@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z, ZodError } from "zod";
-import type { EditorialStatus, InboxStatus, TrustLevel } from "@prisma/client";
+import type { EditorialStatus, TrustLevel } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { createSession, destroySession, requireAdminAction, UnauthorizedError } from "@/lib/auth/session";
@@ -93,17 +93,30 @@ export async function logoutAction(formData: FormData) {
 
 // ---------------------------------------------------------------- inbox
 
-export async function setItemStatusAction(formData: FormData) {
+// One action per target status. (A shared action that read the status from the
+// clicked button's name/value broke: React replaces the `name` of a button that
+// has its own formAction, so the value could be lost.)
+async function setItemStatus(formData: FormData, status: "new" | "investigating" | "rejected") {
   const ids = formData.getAll("itemId").map(String).filter(Boolean);
-  const status = str(formData, "status") as InboxStatus;
   const returnTo = str(formData, "returnTo") || "/admin/inbox";
-  return guarded(formData, returnTo, async (actor) => {
-    if (!["new", "investigating", "rejected"].includes(status)) throw new WorkflowError("Unknown status");
+  return guarded(formData, returnTo.startsWith("/admin") ? returnTo : "/admin/inbox", async (actor) => {
     if (!ids.length) throw new WorkflowError("Select at least one item.");
     await prisma.collectedItem.updateMany({ where: { id: { in: ids } }, data: { inboxStatus: status } });
     await audit(actor, `item.${status}`, "item", ids.length === 1 ? ids[0] : null, { count: ids.length });
-    return `${ids.length} item${ids.length > 1 ? "s" : ""} marked ${status}.`;
+    return `${ids.length} item${ids.length > 1 ? "s" : ""} marked ${status === "new" ? "as new" : status}.`;
   });
+}
+
+export async function investigateItemsAction(formData: FormData) {
+  return setItemStatus(formData, "investigating");
+}
+
+export async function rejectItemsAction(formData: FormData) {
+  return setItemStatus(formData, "rejected");
+}
+
+export async function restoreItemsAction(formData: FormData) {
+  return setItemStatus(formData, "new");
 }
 
 export async function createStoryAction(formData: FormData) {

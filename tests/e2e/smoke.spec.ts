@@ -77,10 +77,58 @@ test.describe("editorial flow", () => {
     await expect(page.getByRole("status")).toContainText(/Dev mailbox|accepted/);
 
     // Bulk send is blocked until reviewed
-    await expect(page.getByRole("button", { name: /^Send issue #/ })).toBeDisabled();
+    const sendButton = page.getByRole("button", { name: /^Send issue #/ });
+    await expect(sendButton).toBeDisabled();
+
+    // 6. Review, then send with the typed issue number; the worker delivers it
+    await page.getByRole("button", { name: "Mark reviewed" }).click();
+    await expect(page.getByRole("status")).toContainText("Marked as reviewed");
+    const label = (await sendButton.innerText()).trim();
+    const issueNumber = /#(\d+)/.exec(label)![1];
+    await page.getByLabel(/Type the issue number/).fill("0");
+    await sendButton.click();
+    await expect(page.getByText(/Type the issue number \(\d+\) to confirm the send/)).toBeVisible();
+    await page.getByLabel(/Type the issue number/).fill(issueNumber);
+    await page.getByRole("button", { name: /^Send issue #/ }).click();
+    await expect(page.getByRole("status")).toContainText("Queued for");
+    // The background worker sends queued deliveries every 15 s.
+    await expect(async () => {
+      await page.reload();
+      await expect(page.getByText(/Status:\s*(sent|partially failed)/)).toBeVisible();
+    }).toPass({ timeout: 60_000, intervals: [5_000] });
+    await page.goto(`/newsletter/${issueNumber}`);
+    await expect(page.getByText(headline)).toBeVisible();
   });
 
-  test("subscribe → confirm → unsubscribe in development mode", async ({ page }) => {
+  test("inbox Investigate / Reject / Back to new move items between tabs", async ({ page }) => {
+    await login(page);
+    const tag = `${RUN}-inbox`;
+    const dir = mkdtempSync(join(tmpdir(), "brief-e2e-"));
+    const file = join(dir, "posts.json");
+    writeFileSync(file, JSON.stringify({ version: 1, posts: [{ platform: "x", url: `https://x.com/e2e/status/${tag}`, text: `E2E ${tag} PLC triage item` }] }));
+    await page.goto("/admin/import");
+    await page.locator("input[type=file][name=file]").setInputFiles(file);
+    await page.getByRole("button", { name: "Import file" }).click();
+    await expect(page.getByRole("status")).toContainText("Imported 1 post");
+
+    const row = (status: string) => `/admin/inbox?status=${status}&q=${encodeURIComponent(tag)}`;
+    await page.goto(row("new"));
+    await page.getByRole("checkbox", { name: new RegExp(tag) }).check();
+    await page.getByRole("button", { name: "Investigate" }).click();
+    await expect(page.getByRole("status")).toContainText("marked investigating");
+    await page.goto(row("investigating"));
+    await page.getByRole("checkbox", { name: new RegExp(tag) }).check();
+    await page.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByRole("status")).toContainText("marked rejected");
+    await page.goto(row("rejected"));
+    await page.getByRole("checkbox", { name: new RegExp(tag) }).check();
+    await page.getByRole("button", { name: "Back to new" }).click();
+    await expect(page.getByRole("status")).toContainText("marked as new");
+    await page.goto(row("new"));
+    await expect(page.getByRole("checkbox", { name: new RegExp(tag) })).toBeVisible();
+  });
+
+  test("subscribe → confirm in development mode (unsubscribe is covered by integration tests)", async ({ page }) => {
     const email = `e2e-${RUN}@example.com`;
     await page.goto("/");
     await page.getByLabel("Email address").fill(email);

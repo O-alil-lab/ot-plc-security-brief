@@ -105,7 +105,9 @@ On Windows you can double-click `start-local.cmd` instead.
 - creates `.env`;
 - applies migrations, adds the sources and the DEMO stories;
 - creates an admin, with the sign-in saved to `.local/ADMIN-LOGIN.txt`;
-- runs the site at http://localhost:3000 and the background worker.
+- builds the app (only on the first run or after code changes) and runs it at http://localhost:3000 with the background worker.
+
+Add `-- --dev` (`npm run local -- --dev`) for development mode with hot reload.
 
 Press Ctrl+C to stop.
 
