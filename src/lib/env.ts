@@ -9,7 +9,8 @@ function read(name: string): string | undefined {
 
 export const env = {
   get baseUrl(): string {
-    return (read("APP_BASE_URL") ?? "http://localhost:3000").replace(/\/+$/, "");
+    // RENDER_EXTERNAL_URL is set automatically on Render web services.
+    return (read("APP_BASE_URL") ?? read("RENDER_EXTERNAL_URL") ?? "http://localhost:3000").replace(/\/+$/, "");
   },
   get appSecret(): string {
     const s = read("APP_SECRET");
@@ -37,6 +38,11 @@ export const env = {
   },
   get emailReplyTo(): string | undefined {
     return read("EMAIL_REPLY_TO");
+  },
+  /** Shared secret for POST /api/cron. When unset, the endpoint is disabled. */
+  get cronSecret(): string | undefined {
+    const s = read("CRON_SECRET");
+    return s && s.length >= 32 ? s : undefined;
   },
   get aiProvider(): "none" | "anthropic" {
     return read("AI_PROVIDER") === "anthropic" ? "anthropic" : "none";

@@ -40,6 +40,12 @@ The end-to-end flow covers:
 - send a community submission and see it queued for review;
 - check that public pages don't scroll sideways on a Pixel 7 viewport.
 
+## Hosting (2026-10-30)
+
+- Render Blueprint (`render.yaml`), `npm run start:hosted`, `POST /api/cron`, `/api/health` and a GitHub Actions schedule were added.
+- Verified locally with a production build on a fresh database. The start sequence ran migrations, seeded sources and created the admin, then a second run skipped admin creation. Health returned OK, cron rejected requests without the token, and a cron run with the token ingested 8 sources and synced KEV in 23 s. Admin sign-in worked.
+- Tests: 129 passed.
+
 ## Integration status
 
 | Integration | Status |

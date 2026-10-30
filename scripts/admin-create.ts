@@ -1,6 +1,8 @@
 /**
  * Create (or reset the password of) the single admin account.
  *   npm run admin:create
+ *   npm run admin:create -- --if-missing   (hosting start-up: create from
+ *     ADMIN_EMAIL/ADMIN_PASSWORD only if no admin exists yet; otherwise no-op)
  * Prompts interactively, or reads ADMIN_EMAIL / ADMIN_PASSWORD once from the
  * environment. Nothing is printed except the email.
  */
@@ -29,6 +31,12 @@ async function promptHidden(question: string): Promise<string> {
 }
 
 async function main() {
+  if (process.argv.includes("--if-missing")) {
+    if (await prisma.admin.count()) return console.log("Admin already exists; skipping.");
+    if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+      return console.log("No admin yet. Set ADMIN_EMAIL and ADMIN_PASSWORD and restart, or run npm run admin:create.");
+    }
+  }
   let email = process.env.ADMIN_EMAIL;
   let password = process.env.ADMIN_PASSWORD;
   if (!email || !password) {

@@ -1,0 +1,34 @@
+name: Scheduled background work
+
+# Calls the deployed app's POST /api/cron every 30 minutes to poll feeds,
+# send queued newsletter deliveries and refresh CISA KEV.
+# Setup (repo Settings > Secrets and variables > Actions):
+#   - Variable APP_URL   e.g. https://ot-plc-security-brief.onrender.com
+#   - Secret   CRON_SECRET  the same value as CRON_SECRET on the host
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Trigger background work
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::APP_URL variable or CRON_SECRET secret not set yet; skipping."
+            exit 0
+          fi
+          # Free hosts may be asleep; the first request wakes them, so retry.
+          curl --fail-with-body --silent --show-error --max-time 900 \
+               --retry 3 --retry-delay 30 --retry-all-errors \
+               -X POST -H "Authorization: Bearer $CRON_SECRET" \
+               "$APP_URL/api/cron"
+          echo

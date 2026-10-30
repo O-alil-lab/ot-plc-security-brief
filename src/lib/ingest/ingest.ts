@@ -238,11 +238,15 @@ export async function runSource(
 }
 
 /** Run every enabled source that is due. Concurrency-limited. */
-export async function runDueSources(now = new Date(), concurrency = 3): Promise<RunResult[]> {
+export async function runDueSources(now = new Date(), concurrency = 3, maxSources = Infinity): Promise<RunResult[]> {
   const sources = await prisma.source.findMany({
     where: { enabled: true, type: { in: ["rss", "atom"] }, url: { not: null }, isDemo: false },
   });
-  const due = sources.filter((s) => nextDueAt(s) <= now);
+  // Oldest-attempted first, so a capped run still rotates through every source.
+  const due = sources
+    .filter((s) => nextDueAt(s) <= now)
+    .sort((a, b) => (a.lastAttemptAt?.getTime() ?? 0) - (b.lastAttemptAt?.getTime() ?? 0))
+    .slice(0, maxSources);
   const results: RunResult[] = [];
   let i = 0;
   async function workerLoop() {

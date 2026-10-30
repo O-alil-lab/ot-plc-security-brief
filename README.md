@@ -143,6 +143,7 @@ All variables are documented in [`.env.example`](.env.example). Never commit `.e
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | for `smtp` | Mailpit: `localhost` / `1025` |
 | `RESEND_API_KEY` | for `resend` | |
 | `AI_PROVIDER`, `ANTHROPIC_API_KEY`, `AI_MODEL` | no | AI is off unless all three are set |
+| `CRON_SECRET` | for `/api/cron` | 32+ characters. Enables `POST /api/cron` (background work without a worker process) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | no | Read once by `npm run admin:create` for non-interactive setup. Remove them afterwards |
 
 ## Database and migrations
@@ -342,6 +343,9 @@ Implemented controls:
 On dependencies, `npm audit` reports 0 vulnerabilities as of 2026-10-30. `package.json` pins `deepmerge-ts` to `^8` through `overrides`. That fixes GHSA-ggr8-5vv4-36mx in the Prisma CLI's config loader; the Prisma CLI was re-checked with `validate`, `generate`, `migrate status` and `migrate deploy`. Remove the override when you upgrade to Prisma 7. Run `npm audit` regularly.
 
 ## Deployment
+
+**Render with auto-deploy from GitHub** is set up through [`render.yaml`](render.yaml), and a free GitHub Actions schedule replaces the worker. See [`DEPLOY.md`](DEPLOY.md) for the step-by-step setup.
+
 
 - **Container**: the `Dockerfile` builds one image for both roles. The app runs `npm start` and the worker runs `npm run worker`. Run `npm run db:deploy` (`prisma migrate deploy`) on each release.
 - **Any Node host** works if it can run a long-lived worker next to the web app, for example a VPS, Fly.io, Render or Railway. Vercel-style serverless hosting suits the web app, but the worker needs its own process. As an alternative, schedule `npm run worker:once` with cron every 5 minutes. Sends will then be batched per run.
