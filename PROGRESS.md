@@ -55,6 +55,7 @@ The end-to-end flow covers:
   - Both now run under `scripts/guard.cjs`, which ends their process tree within about 2 seconds of the launcher disappearing.
   - The launcher also handles the window-close signals (SIGHUP/SIGBREAK).
   - A database left over from a killed session is detected (after checking it really is PostgreSQL) and stopped on the next start.
+  - If port 3000 is already in use, the launcher picks the next free port and says which one.
   - Verified by hard-killing the launcher: the web server and worker exit within 6 s, and the next start recovers. After Ctrl+C, no processes are left.
 - **Added:** a branded 404 page.
 - **Verified:**

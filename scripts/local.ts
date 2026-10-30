@@ -15,13 +15,15 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
+import { createServer } from "node:net";
 import EmbeddedPostgres from "embedded-postgres";
 
 const ROOT = resolve(__dirname, "..");
 const LOCAL = join(ROOT, ".local");
 const DATA = join(LOCAL, "pgdata");
 const PG_PORT = Number(process.env.LOCAL_PG_PORT ?? 54329);
-const APP_PORT = Number(process.env.PORT ?? 3000);
+const PREFERRED_PORT = Number(process.env.PORT ?? 3000);
+let APP_PORT = PREFERRED_PORT;
 const DB_URL = `postgresql://brief:brief@localhost:${PG_PORT}/brief`;
 const isWin = process.platform === "win32";
 const DEV_MODE = process.argv.includes("--dev");
@@ -42,6 +44,18 @@ function newestSourceMtime(): number {
     if (existsSync(join(ROOT, f))) newest = Math.max(newest, statSync(join(ROOT, f)).mtimeMs);
   }
   return newest;
+}
+
+/** Resolves true if nothing is listening on the port (IPv4 and IPv6 localhost). */
+function portIsFree(port: number): Promise<boolean> {
+  const tryHost = (host: string) =>
+    new Promise<boolean>((resolve) => {
+      const srv = createServer()
+        .once("error", (e: NodeJS.ErrnoException) => resolve(e.code === "EADDRNOTAVAIL" || e.code === "EAFNOSUPPORT"))
+        .once("listening", () => srv.close(() => resolve(true)))
+        .listen(port, host);
+    });
+  return tryHost("127.0.0.1").then((v4) => (v4 ? tryHost("::1") : false));
 }
 
 /** True only if `pid` is a running PostgreSQL server process (never touch anything else). */
@@ -119,6 +133,17 @@ function ensureEnvFile() {
 
 async function main() {
   mkdirSync(LOCAL, { recursive: true });
+  for (let port = PREFERRED_PORT; port < PREFERRED_PORT + 20; port++) {
+    if (await portIsFree(port)) {
+      APP_PORT = port;
+      break;
+    }
+  }
+  if (APP_PORT !== PREFERRED_PORT) {
+    log(`Port ${PREFERRED_PORT} is already in use (another copy of the app may still be running). Using port ${APP_PORT} instead.`);
+  } else if (!(await portIsFree(APP_PORT))) {
+    throw new Error(`Ports ${PREFERRED_PORT}-${PREFERRED_PORT + 19} are all in use. Close other servers and try again.`);
+  }
   ensureEnvFile();
 
   const firstRun = !existsSync(join(DATA, "PG_VERSION"));
