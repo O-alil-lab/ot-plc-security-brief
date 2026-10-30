@@ -54,7 +54,7 @@ The end-to-end flow covers:
 | Agent Reach | **Not implemented** by design. Export its results and use the JSON import |
 | Siemens CSAF adapter | **Not implemented** |
 | Email delivery webhooks | **Not implemented** |
-| GitHub Actions CI | **Implemented.** Runs on first push; not yet observed passing on GitHub |
+| GitHub Actions CI | **Tested.** First run on GitHub passed (lint, typecheck, 125 tests, build) |
 
 ## Decisions
 
