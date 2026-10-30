@@ -1,0 +1,347 @@
+// OT & PLC Security Brief — database schema
+// Run `npm run db:migrate` after editing.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  rss
+  atom
+  json
+  social_import
+  submission
+}
+
+enum TrustLevel {
+  primary_vendor
+  government_cert
+  research
+  news
+  social
+  community
+}
+
+enum FetchStatus {
+  ok
+  http_error
+  timeout
+  parse_error
+  blocked
+  ssrf_rejected
+  too_large
+  network_error
+}
+
+enum InboxStatus {
+  new
+  investigating
+  rejected
+  used
+}
+
+enum VerificationStatus {
+  unverified
+  partially_verified
+  verified_primary
+}
+
+enum EditorialStatus {
+  draft
+  approved
+  published
+  rejected
+}
+
+enum IssueStatus {
+  draft
+  reviewed
+  sending
+  sent
+  partially_failed
+}
+
+enum DeliveryStatus {
+  pending
+  accepted
+  failed
+}
+
+enum SubscriberStatus {
+  pending
+  active
+  unsubscribed
+  bounced
+}
+
+enum SubmissionStatus {
+  pending
+  promoted
+  rejected
+  spam
+}
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  csrfSecret String
+  adminId    String
+  admin      Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([adminId])
+}
+
+model Source {
+  id                  String          @id @default(cuid())
+  name                String
+  type                SourceType      @default(rss)
+  url                 String?
+  enabled             Boolean         @default(true)
+  category            String          @default("general")
+  trustLevel          TrustLevel      @default(news)
+  pollIntervalMinutes Int             @default(60)
+  lastAttemptAt       DateTime?
+  lastSuccessAt       DateTime?
+  lastStatus          FetchStatus?
+  lastError           String?
+  consecutiveFailures Int             @default(0)
+  etag                String?
+  lastModified        String?
+  isDemo              Boolean         @default(false)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  items               CollectedItem[]
+  runs                FetchRun[]
+
+  @@unique([url])
+}
+
+model FetchRun {
+  id           String      @id @default(cuid())
+  sourceId     String
+  source       Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  startedAt    DateTime    @default(now())
+  finishedAt   DateTime?
+  status       FetchStatus
+  httpStatus   Int?
+  itemsSeen    Int         @default(0)
+  itemsNew     Int         @default(0)
+  itemsUpdated Int         @default(0)
+  error        String?
+  trigger      String      @default("schedule")
+
+  @@index([sourceId, startedAt])
+}
+
+model DuplicateGroup {
+  id        String          @id @default(cuid())
+  reason    String
+  createdAt DateTime        @default(now())
+  items     CollectedItem[]
+}
+
+model CollectedItem {
+  id                 String          @id @default(cuid())
+  sourceId           String
+  source             Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  guid               String
+  url                String?
+  canonicalUrl       String?
+  title              String
+  excerpt            String?
+  author             String?
+  publishedAt        DateTime?
+  sourceUpdatedAt    DateTime?
+  collectedAt        DateTime        @default(now())
+  contentHash        String
+  extractedIds       String[]        @default([])
+  relevanceScore     Int             @default(0)
+  relevanceBreakdown Json?
+  inboxStatus        InboxStatus     @default(new)
+  duplicateGroupId   String?
+  duplicateGroup     DuplicateGroup? @relation(fields: [duplicateGroupId], references: [id], onDelete: SetNull)
+  suggestedGroupIds  String[]        @default([])
+  socialMeta         Json?
+  isDemo             Boolean         @default(false)
+  revisions          ItemRevision[]
+  stories            StorySource[]
+
+  @@unique([sourceId, guid])
+  @@index([canonicalUrl])
+  @@index([inboxStatus, collectedAt])
+}
+
+model ItemRevision {
+  id              String        @id @default(cuid())
+  itemId          String
+  item            CollectedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  previousTitle   String
+  previousExcerpt String?
+  previousHash    String
+  detectedAt      DateTime      @default(now())
+}
+
+model Story {
+  id                 String             @id @default(cuid())
+  headline           String
+  slug               String             @unique
+  summary            String             @default("")
+  whyItMatters       String             @default("")
+  defensiveGuidance  String             @default("")
+  guidanceSource     String             @default("")
+  categories         String[]           @default([])
+  vendors            String[]           @default([])
+  products           String[]           @default([])
+  affectedVersions   String?
+  cveIds             String[]           @default([])
+  advisoryIds        String[]           @default([])
+  verificationStatus VerificationStatus @default(unverified)
+  editorialStatus    EditorialStatus    @default(draft)
+  aiAssisted         Boolean            @default(false)
+  isDemo             Boolean            @default(false)
+  approvedAt         DateTime?
+  publishedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sources            StorySource[]
+  issues             IssueStory[]
+
+  @@index([editorialStatus, publishedAt])
+}
+
+model StorySource {
+  storyId String
+  itemId  String
+  story   Story         @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  item    CollectedItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@id([storyId, itemId])
+}
+
+model NewsletterIssue {
+  id                 String               @id @default(cuid())
+  number             Int                  @unique
+  title              String
+  subject            String
+  previewText        String               @default("")
+  intro              String               @default("")
+  footer             String               @default("")
+  status             IssueStatus          @default(draft)
+  sendIdempotencyKey String?              @unique
+  isDemo             Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  reviewedAt         DateTime?
+  publishedAt        DateTime?
+  sendStartedAt      DateTime?
+  sendFinishedAt     DateTime?
+  stories            IssueStory[]
+  deliveries         NewsletterDelivery[]
+}
+
+model IssueStory {
+  issueId  String
+  storyId  String
+  position Int
+  issue    NewsletterIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  story    Story           @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, storyId])
+}
+
+model NewsletterDelivery {
+  id                String          @id @default(cuid())
+  issueId           String
+  subscriberId      String
+  issue             NewsletterIssue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  subscriber        Subscriber      @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  status            DeliveryStatus  @default(pending)
+  attempts          Int             @default(0)
+  providerMessageId String?
+  error             String?
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([issueId, subscriberId])
+  @@index([issueId, status])
+}
+
+model Subscriber {
+  id                   String               @id @default(cuid())
+  email                String               @unique
+  status               SubscriberStatus     @default(pending)
+  signupSource         String               @default("website")
+  consentAt            DateTime
+  consentTextVersion   String
+  confirmedAt          DateTime?
+  unsubscribedAt       DateTime?
+  confirmTokenHash     String?              @unique
+  confirmTokenExpires  DateTime?
+  unsubscribeTokenHash String               @unique
+  createdAt            DateTime             @default(now())
+  deliveries           NewsletterDelivery[]
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  url          String
+  note         String?
+  contactEmail String?
+  status       SubmissionStatus @default(pending)
+  ipHash       String?
+  itemId       String?
+  createdAt    DateTime         @default(now())
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actor      String
+  action     String
+  objectType String
+  objectId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([objectType, objectId])
+  @@index([createdAt])
+}
+
+// Development-only outbox used by EMAIL_PROVIDER=console so you can read
+// test sends and confirmation emails in the admin UI without sending mail.
+model DevOutboxMessage {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  html      String
+  text      String
+  headers   Json?
+  createdAt DateTime @default(now())
+}
+
+model KevEntry {
+  cveId     String   @id
+  vendor    String?
+  product   String?
+  dateAdded DateTime?
+  syncedAt  DateTime @default(now())
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>DEMO — Fictional Industrial Advisories</title>
+    <link>https://example.com/demo</link>
+    <description>Clearly fictional sample data for demo mode. Not real news.</description>
+    <item>
+      <title>[DEMO] Example Automation Co. FlowLogix PLC firmware: authentication bypass in web interface</title>
+      <link>https://example.com/demo/advisories/demo-adv-001</link>
+      <guid>demo-adv-001</guid>
+      <pubDate>Mon, 26 Oct 2026 09:00:00 GMT</pubDate>
+      <description>FICTIONAL SAMPLE. Example Automation Co. reports that the web interface of FlowLogix PLC firmware could allow an unauthenticated attacker on the control network to change configuration. The vendor recommends restricting access to the engineering network. This is demo data for the OT &amp; PLC Security Brief.</description>
+    </item>
+    <item>
+      <title>[DEMO] SCADA historian from Sample Grid Systems exposes Modbus gateway to denial of service</title>
+      <link>https://example.com/demo/advisories/demo-adv-002</link>
+      <guid>demo-adv-002</guid>
+      <pubDate>Tue, 27 Oct 2026 14:30:00 GMT</pubDate>
+      <description>FICTIONAL SAMPLE. A crafted Modbus/TCP request could stop the historian service of a fictional SCADA product. Demo data only.</description>
+    </item>
+    <item>
+      <title>[DEMO] Researchers describe ransomware playbook targeting HMI workstations in water utilities</title>
+      <link>https://example.com/demo/research/demo-research-003</link>
+      <guid>demo-research-003</guid>
+      <pubDate>Wed, 28 Oct 2026 08:15:00 GMT</pubDate>
+      <description>FICTIONAL SAMPLE. A demo research write-up about HMI workstation hardening and segmentation for critical infrastructure operators.</description>
+    </item>
+    <item>
+      <title>[DEMO] Generic office VPN appliance update released</title>
+      <link>https://example.com/demo/it/demo-it-004</link>
+      <guid>demo-it-004</guid>
+      <pubDate>Thu, 29 Oct 2026 10:00:00 GMT</pubDate>
+      <description>FICTIONAL SAMPLE. An IT-only item with no industrial terms; it should score low on relevance.</description>
+    </item>
+  </channel>
+</rss>
