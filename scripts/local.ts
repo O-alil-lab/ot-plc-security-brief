@@ -44,6 +44,36 @@ function newestSourceMtime(): number {
   return newest;
 }
 
+/** True only if `pid` is a running PostgreSQL server process (never touch anything else). */
+function isPostgresProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  if (isWin) {
+    const r = spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], { encoding: "utf8" });
+    return /"postgres\.exe"/i.test(r.stdout ?? "");
+  }
+  try {
+    return /postgres/.test(readFileSync(`/proc/${pid}/cmdline`, "utf8"));
+  } catch {
+    return process.platform === "darwin"; // no /proc; the PID came from this data dir's own lock file
+  }
+}
+
+/** Stop a bundled database left running by a session that was killed without cleaning up. */
+async function stopLeftoverPostgres() {
+  const pidFile = join(DATA, "postmaster.pid");
+  if (!existsSync(pidFile)) return;
+  const pid = Number(readFileSync(pidFile, "utf8").split(/\r?\n/)[0]);
+  if (!pid || !isPostgresProcess(pid)) return; // stale lock file: PostgreSQL clears it on start
+  log("Stopping a database left running by a previous session...");
+  if (isWin) spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+  else process.kill(pid, "SIGINT"); // fast, clean shutdown
+  for (let i = 0; i < 30 && isPostgresProcess(pid); i++) await new Promise((r) => setTimeout(r, 500));
+}
+
 function buildIsCurrent(): boolean {
   const id = join(ROOT, ".next", "BUILD_ID");
   return existsSync(id) && statSync(id).mtimeMs >= newestSourceMtime();
@@ -97,6 +127,7 @@ async function main() {
     log("First run: initialising the bundled PostgreSQL (one time)...");
     await pg.initialise();
   }
+  await stopLeftoverPostgres();
   await pg.start();
   log(`PostgreSQL running on port ${PG_PORT} (data in .local/pgdata).`);
   if (firstRun) {
@@ -133,8 +164,14 @@ async function main() {
     log("Stopped. Your data is kept in .local/ for next time.");
     process.exit(code);
   };
-  process.on("SIGINT", () => void stop());
-  process.on("SIGTERM", () => void stop());
+  // SIGHUP/SIGBREAK: the console window was closed (Windows) or the terminal went away.
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
+    try {
+      process.on(sig, () => void stop());
+    } catch {
+      /* signal not supported on this platform */
+    }
+  }
 
   try {
     log("Preparing the database client...");
@@ -175,13 +212,20 @@ async function main() {
   }
 
   log(`Starting the web app${DEV_MODE ? " in development mode" : ""} on http://localhost:${APP_PORT} and the background worker...`);
-  // On macOS/Linux each child gets its own process group so stop() can end its whole tree.
-  const opts = { cwd: ROOT, env, stdio: "inherit" as const, shell: isWin, detached: !isWin };
-  const web = spawn(
-    ...spawnArgs("npx", DEV_MODE ? ["next", "dev", "-p", String(APP_PORT)] : ["next", "start", "-p", String(APP_PORT)]),
-    DEV_MODE ? opts : { ...opts, env: { ...env, NODE_ENV: "production" } },
-  );
-  const worker = spawn(...spawnArgs("npx", ["tsx", "scripts/worker.ts"]), opts);
+  // Each child runs under scripts/guard.cjs, which ends it (and everything it
+  // started) if this launcher disappears, e.g. when its window is closed.
+  // On macOS/Linux each guard gets its own process group so stop() can end it too.
+  const guarded = (args: string[], extraEnv: Record<string, string> = {}) =>
+    spawn(process.execPath, [join(ROOT, "scripts", "guard.cjs"), String(process.pid), "npx", ...args], {
+      cwd: ROOT,
+      env: { ...env, ...extraEnv },
+      stdio: "inherit",
+      detached: !isWin,
+    });
+  const web = DEV_MODE
+    ? guarded(["next", "dev", "-p", String(APP_PORT)])
+    : guarded(["next", "start", "-p", String(APP_PORT)], { NODE_ENV: "production" });
+  const worker = guarded(["tsx", "scripts/worker.ts"]);
   children.push(web, worker);
   web.on("exit", (code) => {
     if (!stopping) {

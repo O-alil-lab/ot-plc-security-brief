@@ -51,6 +51,11 @@ The end-to-end flow covers:
 - **Fixed:** the inbox Investigate / Reject / Back to new buttons used one shared action and passed the status in the button's `name`/`value`. React replaces a button's `name` when it has its own formAction, so the status could be lost; this also caused a hydration-mismatch error. Each button now has its own action. A new e2e test covers all three.
 - **Fixed:** a fresh `npm ci` didn't generate the Prisma client, so local setup failed on Windows. A `postinstall` script now runs `prisma generate`, and `npm run local` also runs it.
 - **Changed:** `npm run local` now runs the production build: built once, rebuilt only after code changes. It is much faster and doesn't show the dev overlay; that overlay was behind the metadata hydration warning seen on the first Windows page load. `--dev` keeps hot-reload mode.
+- **Fixed (Windows):** closing the launcher window didn't stop the web server and worker, which kept running and kept the window open.
+  - Both now run under `scripts/guard.cjs`, which ends their process tree within about 2 seconds of the launcher disappearing.
+  - The launcher also handles the window-close signals (SIGHUP/SIGBREAK).
+  - A database left over from a killed session is detected (after checking it really is PostgreSQL) and stopped on the next start.
+  - Verified by hard-killing the launcher: the web server and worker exit within 6 s, and the next start recovers. After Ctrl+C, no processes are left.
 - **Added:** a branded 404 page.
 - **Verified:**
   - an automated sweep of 37 public and admin URLs, in dev and production builds, found 0 console errors, 0 page errors, 0 Next.js issues and 0 server errors (only intentional 404s);
