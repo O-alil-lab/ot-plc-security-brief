@@ -60,6 +60,36 @@ function portIsFree(port: number): Promise<boolean> {
   return tryHost("127.0.0.1").then((v4) => (v4 ? tryHost("::1") : false));
 }
 
+/**
+ * Make sure the app databases exist and use UTF-8. A database created with
+ * another encoding (older Windows installs used WIN1252) is kept as a renamed
+ * backup and a fresh UTF-8 database is created; feeds are re-fetched and the
+ * admin is restored. Returns the names of databases that were (re)created.
+ */
+async function ensureUtf8Databases(pg: EmbeddedPostgres): Promise<Set<string>> {
+  const created = new Set<string>();
+  const client = pg.getPgClient("postgres");
+  await client.connect();
+  try {
+    for (const db of ["brief", "brief_test"]) {
+      const r = await client.query<{ enc: string }>("SELECT pg_encoding_to_char(encoding) AS enc FROM pg_database WHERE datname = $1", [db]);
+      const enc = r.rows[0]?.enc;
+      if (enc === "UTF8") continue;
+      if (enc) {
+        const stamp = new Date().toISOString().slice(0, 19).replace(/\D/g, "");
+        const backup = `${db}_${enc.toLowerCase()}_backup_${stamp}`;
+        await client.query(`ALTER DATABASE "${db}" RENAME TO "${backup}"`);
+        log(`Database "${db}" used ${enc} encoding, which can't store some advisory text. Kept it as "${backup}" and created a new UTF-8 database; feeds will be fetched again.`);
+      }
+      await client.query(`CREATE DATABASE "${db}" ENCODING 'UTF8' TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`);
+      created.add(db);
+    }
+  } finally {
+    await client.end();
+  }
+  return created;
+}
+
 /** True only if `pid` is a running PostgreSQL server process (never touch anything else). */
 function isPostgresProcess(pid: number): boolean {
   try {
@@ -149,7 +179,18 @@ async function main() {
   ensureEnvFile();
 
   const firstRun = !existsSync(join(DATA, "PG_VERSION"));
-  const pg = new EmbeddedPostgres({ databaseDir: DATA, user: "brief", password: "brief", port: PG_PORT, persistent: true, onLog: () => {} });
+  // Always UTF-8 with the C locale. Without this, initdb on Windows follows the
+  // system locale (e.g. WIN1252), and advisories containing characters outside
+  // that code page fail to save.
+  const pg = new EmbeddedPostgres({
+    databaseDir: DATA,
+    user: "brief",
+    password: "brief",
+    port: PG_PORT,
+    persistent: true,
+    initdbFlags: ["--encoding=UTF8", "--locale=C"],
+    onLog: () => {},
+  });
   if (firstRun) {
     log("First run: initialising the bundled PostgreSQL (one time)...");
     await pg.initialise();
@@ -157,10 +198,7 @@ async function main() {
   await stopLeftoverPostgres();
   await pg.start();
   log(`PostgreSQL running on port ${PG_PORT} (data in .local/pgdata).`);
-  if (firstRun) {
-    await pg.createDatabase("brief");
-    await pg.createDatabase("brief_test");
-  }
+  const recreated = await ensureUtf8Databases(pg);
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -208,7 +246,22 @@ async function main() {
     run("npx", ["tsx", "scripts/seed.ts"], env);
 
     const loginFile = join(LOCAL, "ADMIN-LOGIN.txt");
-    if (firstRun || !existsSync(loginFile)) {
+    if (recreated.has("brief") && existsSync(loginFile)) {
+      // Database was rebuilt as UTF-8: restore the demo data and the same admin sign-in.
+      run("npx", ["tsx", "scripts/seed-demo.ts"], env);
+      const t = readFileSync(loginFile, "utf8");
+      const email = /Email:\s+(\S+)/.exec(t)?.[1];
+      const password = /Password:\s+(\S+)/.exec(t)?.[1];
+      if (email && password) {
+        spawnSync(...spawnArgs("npx", ["tsx", "scripts/admin-create.ts", "--if-missing"]), {
+          cwd: ROOT,
+          env: { ...env, ADMIN_EMAIL: email, ADMIN_PASSWORD: password },
+          stdio: "ignore",
+          shell: isWin,
+        });
+        log("Admin restored with the sign-in in .local/ADMIN-LOGIN.txt.");
+      }
+    } else if (firstRun || !existsSync(loginFile)) {
       run("npx", ["tsx", "scripts/seed-demo.ts"], env);
       const email = "admin@localhost.test";
       const password = randomBytes(12).toString("base64url");

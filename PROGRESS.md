@@ -74,6 +74,7 @@ The end-to-end flow covers:
   - 8 real advisories were published. The Siemens SSA and the CISA ICSA for the same Mendix issue were merged into one story.
   - Text-cleaning fixes came out of this check: CISA's "View CSAF Summary" prefix, Siemens title prefixes, cutting at sentence boundaries, and naming the vendor in headlines that start with CVE IDs.
 - **Tests:** 153 unit and integration tests pass (16 new for the agent, including fake-AI hallucination and failure cases); 7 e2e tests pass; the page sweep is clean.
+- **Fixed (Windows):** the bundled PostgreSQL followed the Windows system locale and created WIN1252 databases, so advisories containing characters outside WIN1252 (e.g. "†") failed to save (error 22P05). New installs now use `--encoding=UTF8 --locale=C`. Existing non-UTF-8 databases are kept as renamed backups and replaced with UTF-8 ones; demo data and the same admin sign-in are restored. Verified against a simulated WIN1252 install and a fresh install.
 - **Not exercised:** a live Anthropic API call, because no key is available in the build environment. The parsing and validation of AI output are covered by tests.
 - **Audit:** production dependencies have 0 vulnerabilities. One moderate advisory affects `minimatch`, which ESLint uses (development only); the fix requires a breaking ESLint change.
 
