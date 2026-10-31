@@ -59,7 +59,8 @@ export function repairXml(xml: string): string {
 function normalise(raw: RawItem): ParsedItem | null {
   const title = toPlainText(raw.title, 500);
   const url = safeHttpUrl(raw.link ?? (typeof raw.guid === "string" && raw.guid.startsWith("http") ? raw.guid : null));
-  const excerpt = toPlainText(raw.contentSnippet ?? raw.summary ?? raw.description ?? raw.content, 1200);
+  // CISA feeds start every excerpt with a "View CSAF Summary" link label.
+  const excerpt = toPlainText(raw.contentSnippet ?? raw.summary ?? raw.description ?? raw.content, 1200).replace(/^View CSAF( Summary)?\s*/i, "");
   if (!title && !url) return null;
   const publishedAt = toDate(raw.isoDate) ?? toDate(raw.pubDate) ?? toDate(raw.published);
   const updated = toDate(raw.updated);

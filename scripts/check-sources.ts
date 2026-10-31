@@ -3,6 +3,8 @@
  *   npm run sources:check
  * Prints a Markdown table you can paste into SOURCE_REGISTRY.md.
  */
+// Load .env like the web app does (APP_SECRET, email settings, proxy, ...).
+import "dotenv/config";
 import { SEED_SOURCES, STRUCTURED_SOURCES } from "../config/sources";
 import { safeFetch, FetchError } from "../src/lib/ingest/fetcher";
 import { parseFeed } from "../src/lib/ingest/parse";

@@ -23,6 +23,11 @@ export const SEED_SOURCES: SeedSource[] = [
   { name: "Siemens ProductCERT Alerts & News", url: "https://cert-portal.siemens.com/productcert/rss/alerts.atom", type: "atom", trustLevel: "primary_vendor", category: "vendor-advisories" },
   { name: "Palo Alto Networks Advisories", url: "https://security.paloaltonetworks.com/rss.xml", type: "rss", trustLevel: "primary_vendor", category: "vendor-advisories" },
   { name: "Fortinet PSIRT", url: "https://filestore.fortinet.com/fortiguard/rss/ir.xml", type: "rss", trustLevel: "primary_vendor", category: "vendor-advisories" },
+  // CERT@VDE is the coordinating CERT for many German/European OT vendors
+  // (Phoenix Contact, WAGO, CODESYS, Beckhoff, Pepperl+Fuchs, Bachmann, ...).
+  { name: "CERT@VDE Advisories (Phoenix Contact, WAGO, CODESYS, Beckhoff, ...)", url: "https://certvde.com/en/advisories/feeds/rss/", type: "rss", trustLevel: "government_cert", category: "vendor-advisories" },
+  { name: "Moxa Security Advisories", url: "https://www.moxa.com/en/rss/moxa-security-advisory", type: "rss", trustLevel: "primary_vendor", category: "vendor-advisories" },
+  { name: "Mitsubishi Electric PSIRT", url: "https://www.mitsubishielectric.com/psirt/vulnerability/xml/info.xml", type: "rss", trustLevel: "primary_vendor", category: "vendor-advisories" },
   { name: "Nozomi Networks Security Alerts", url: "https://security.nozominetworks.com/rss.xml", type: "rss", trustLevel: "research", category: "ot-research" },
   { name: "Kaspersky ICS CERT", url: "https://ics-cert.kaspersky.com/feed/", type: "rss", trustLevel: "research", category: "ot-research" },
   { name: "Waterfall Security", url: "https://waterfall-security.com/feed/", type: "rss", trustLevel: "research", category: "ot-research" },

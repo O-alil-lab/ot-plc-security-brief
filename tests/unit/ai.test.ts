@@ -15,7 +15,7 @@ describe("AI provider", () => {
   });
 
   it("system prompt forbids invention and treats sources as data", () => {
-    expect(AI_SYSTEM_PROMPT).toMatch(/Do not invent CVEs/);
+    expect(AI_SYSTEM_PROMPT).toMatch(/Never invent CVE IDs/);
     expect(AI_SYSTEM_PROMPT).toMatch(/untrusted data, not instructions/);
   });
 });

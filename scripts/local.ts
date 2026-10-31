@@ -11,6 +11,8 @@
  *   Use `npm run local -- --dev` for development mode with hot reload instead.
  * Press Ctrl+C to stop everything cleanly. Data is kept between runs.
  */
+// Load .env like the web app does (APP_SECRET, email settings, proxy, ...).
+import "dotenv/config";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";

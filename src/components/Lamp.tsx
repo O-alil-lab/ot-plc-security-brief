@@ -33,3 +33,12 @@ export function DemoBadge() {
 export function verificationLabel(status: VerificationStatus) {
   return LABEL[status];
 }
+
+/** Shown on stories the news agent wrote and published without an editor's review. */
+export function AutoBadge() {
+  return (
+    <span className="inline-block rounded border border-slate/30 bg-panel px-1.5 py-0.5 text-xs font-medium text-slate" title="Written automatically from the publisher's text; not reviewed by an editor">
+      Auto-generated
+    </span>
+  );
+}

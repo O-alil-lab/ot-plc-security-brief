@@ -16,6 +16,9 @@ Seeded in [`config/sources.ts`](config/sources.ts) via `npm run db:seed`. Re-tes
 | 6 | Siemens ProductCERT Advisories | https://cert-portal.siemens.com/productcert/rss/advisories.atom | Atom | Vendor advisories | primary_vendor | Primary | 2026-10-30 | ok, 1,160 items |
 | 7 | Siemens ProductCERT Alerts & News | https://cert-portal.siemens.com/productcert/rss/alerts.atom | Atom | Vendor alerts | primary_vendor | Primary | 2026-10-30 | ok, 29 items |
 | 8 | Palo Alto Networks Advisories | https://security.paloaltonetworks.com/rss.xml | RSS | Vendor advisories (IT/OT edge) | primary_vendor | Primary | 2026-10-30 | ok, 25 items |
+| 9a | CERT@VDE Advisories (Phoenix Contact, WAGO, CODESYS, Beckhoff, Pepperl+Fuchs, …) | https://certvde.com/en/advisories/feeds/rss/ | RSS | Coordinated vendor advisories | government_cert | Primary | 2026-10-31 | ok, 526 items (newest 2026-10-30) |
+| 9b | Moxa Security Advisories | https://www.moxa.com/en/rss/moxa-security-advisory | RSS | Vendor advisories | primary_vendor | Primary | 2026-10-31 | ok, 207 items (newest 2026-10-27) |
+| 9c | Mitsubishi Electric PSIRT | https://www.mitsubishielectric.com/psirt/vulnerability/xml/info.xml | RSS | Vendor advisories | primary_vendor | Primary | 2026-10-31 | ok, 5 items (newest 2026-10-15) |
 | 9 | Fortinet PSIRT | https://filestore.fortinet.com/fortiguard/rss/ir.xml | RSS | Vendor advisories (IT/OT edge) | primary_vendor | Primary | 2026-10-30 | ok, 50 items |
 | 10 | Nozomi Networks Security Alerts | https://security.nozominetworks.com/rss.xml | RSS | OT research | research | Secondary | 2026-10-30 | ok, 68 items |
 | 11 | Kaspersky ICS CERT | https://ics-cert.kaspersky.com/feed/ | RSS | OT research | research | Secondary | 2026-10-30 | ok, 473 items (needed automatic XML repair) |
@@ -42,6 +45,16 @@ Seeded in [`config/sources.ts`](config/sources.ts) via `npm run db:seed`. Re-tes
 - **Kaspersky ICS CERT** served XML with characters that needed repair (bare ampersands or control characters). The parser repaired it automatically, and the fetch run notes it.
 - URLs can change. If a feed starts failing, find the publisher's current official feed **on the publisher's own site**. Don't guess replacement URLs.
 
+## How the new feeds were found
+
+Each new feed URL was taken from a link on the vendor's own site, then tested with the app's fetcher:
+
+- **CERT@VDE:** the "RSS feeds" service page on certvde.com.
+- **Moxa:** the RSS page linked from moxa.com's security advisory page.
+- **Mitsubishi Electric:** the XML link on its PSIRT vulnerability page.
+
 ## Candidates not yet seeded
 
-Add these once their official feeds have been confirmed on the vendor's own site: Schneider Electric, Rockwell Automation, CODESYS, ABB, Mitsubishi Electric, Phoenix Contact (through CERT@VDE), Honeywell, Emerson.
+- **Schneider Electric and Rockwell Automation:** their advisory pages returned HTTP 403 to automated requests, and no official feed was found. Their ICS advisories still arrive through CISA.
+- **ABB:** publishes CSAF documents (`psirt.abb.com`) but no RSS feed. Needs a CSAF adapter.
+- **Honeywell, Emerson:** no official feed confirmed. Covered through CISA.

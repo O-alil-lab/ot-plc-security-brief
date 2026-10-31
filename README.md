@@ -103,7 +103,7 @@ On Windows you can double-click `start-local.cmd` instead.
 
 - starts a bundled PostgreSQL (data kept in `.local/`);
 - creates `.env`;
-- applies migrations, adds the sources and the DEMO stories;
+- applies migrations, adds the 20 sources and the DEMO stories;
 - creates an admin, with the sign-in saved to `.local/ADMIN-LOGIN.txt`;
 - builds the app (only on the first run or after code changes) and runs it at http://localhost:3000 with the background worker.
 
@@ -222,6 +222,37 @@ Duplicates are handled like this:
 - A shared CVE or advisory ID only *suggests* a link. It never merges items.
 - Editors can group items by hand or split an item out of a group (undo).
 
+## News agent (automatic stories and newsletter)
+
+**Admin → News agent** runs every hour from the worker, or from `POST /api/cron` when hosted. Each run:
+
+1. **Fetches** the newest items from every due source.
+2. **Selects** items that meet all of these conditions:
+   - new and published in the last 7 days;
+   - relevance of 45 or more, with at least one industrial term or vendor;
+   - from the source types you allow (vendor advisories and government/coordinating CERTs by default).
+3. **Groups** items about the same thing: shared CVE or advisory IDs, the same duplicate group, or near-identical opening text from different sources (for example a Siemens SSA and the CISA ICSA for it). If a story on the topic already exists, new sources are linked to it instead of creating a duplicate.
+4. **Writes** each story. With `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`, the AI writes it from the source text only (`AI_MODEL` is optional). The draft is then checked automatically:
+   - a CVE or advisory ID that isn't in the source rejects the draft;
+   - so does an exploitation claim such as "actively exploited" that the source doesn't make;
+   - vendors and products that aren't in the source are removed;
+   - guidance without an attribution is removed.
+
+   If the AI is off, fails, or its draft is rejected, the story uses the publisher's own wording instead.
+5. **Publishes** the story, marked **Auto-generated** with "Partially verified" on the site and in emails. You can switch publishing off to get drafts instead.
+6. **Sends** the weekly issue at the configured day and hour (UTC), once per week, with that week's published stories. It goes only to confirmed subscribers, and is skipped when there are too few stories.
+
+Every run is listed with its log on the News agent page and recorded in the audit log. Use **Dry run** to preview what the agent would write without changing anything.
+
+**To stop it:** untick "Agent switched on", or set `AGENT_DISABLED=1` and restart.
+
+**Before relying on automatic sending:**
+
+- Configure real email (see below). In development mode, issues go to the Dev mailbox only.
+- Remember that no editor checks auto-generated stories. Review them on the Stories page; you can edit or unpublish any of them.
+
+Vendor coverage: Siemens; Phoenix Contact, WAGO, CODESYS, Beckhoff, Pepperl+Fuchs and more through CERT@VDE; Moxa; Mitsubishi Electric; Palo Alto Networks; Fortinet; Hitachi Energy and many others through the CISA ICS advisories. See [`SOURCE_REGISTRY.md`](SOURCE_REGISTRY.md).
+
 ## Sources and ingestion
 
 Add or edit sources in **Admin → Sources**: name, URL, RSS or Atom, trust level, category, interval and enabled. URLs are SSRF-checked when saved and again on every fetch. **Fetch now** runs a source immediately and shows the real result.
@@ -234,7 +265,7 @@ Failures are recorded with their real cause and never shown as "no new items". T
 - malformed feeds
 - unsafe addresses
 
-The 17 seed feeds and their last live test are in [`SOURCE_REGISTRY.md`](SOURCE_REGISTRY.md). Relevance keywords and weights live in [`config/relevance.ts`](config/relevance.ts). Relevance is a triage aid, not severity.
+The 20 seed feeds and their last live test are in [`SOURCE_REGISTRY.md`](SOURCE_REGISTRY.md). Relevance keywords and weights live in [`config/relevance.ts`](config/relevance.ts). Relevance is a triage aid, not severity.
 
 ## Newsletter and email
 

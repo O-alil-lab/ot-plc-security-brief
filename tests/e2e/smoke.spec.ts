@@ -128,6 +128,25 @@ test.describe("editorial flow", () => {
     await expect(page.getByRole("checkbox", { name: new RegExp(tag) })).toBeVisible();
   });
 
+  test("news agent page: settings save and a dry run reports without publishing", async ({ page }) => {
+    await login(page);
+    await page.goto("/admin/agent");
+    await expect(page.getByRole("heading", { name: "News agent" })).toBeVisible();
+    await page.getByLabel("Minimum relevance").fill("50");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByRole("status")).toContainText("News agent settings saved");
+    await expect(page.getByLabel("Minimum relevance")).toHaveValue("50");
+    const published = await page.goto("/feed").then(() => page.getByRole("article").count());
+    await page.goto("/admin/agent");
+    await page.getByRole("button", { name: "Dry run (preview)" }).click();
+    await expect(page.getByRole("status")).toContainText("Dry run finished");
+    await page.goto("/feed");
+    await expect(page.getByRole("article")).toHaveCount(published);
+    await page.goto("/admin/agent");
+    await page.getByLabel("Minimum relevance").fill("45");
+    await page.getByRole("button", { name: "Save settings" }).click();
+  });
+
   test("subscribe → confirm in development mode (unsubscribe is covered by integration tests)", async ({ page }) => {
     const email = `e2e-${RUN}@example.com`;
     await page.goto("/");

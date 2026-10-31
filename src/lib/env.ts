@@ -44,8 +44,9 @@ export const env = {
     const s = read("CRON_SECRET");
     return s && s.length >= 32 ? s : undefined;
   },
+  /** AI is on only when a provider AND its key are set. */
   get aiProvider(): "none" | "anthropic" {
-    return read("AI_PROVIDER") === "anthropic" ? "anthropic" : "none";
+    return read("AI_PROVIDER") === "anthropic" && read("ANTHROPIC_API_KEY") ? "anthropic" : "none";
   },
   read,
 };

@@ -19,6 +19,8 @@ import { promoteSubmission, setSubmissionStatus } from "@/lib/submissions";
 import { importSocialPosts } from "@/lib/social/import";
 import { getAIProvider } from "@/lib/ai/provider";
 import { syncKev } from "@/lib/kev";
+import { runAgent } from "@/lib/agent/agent";
+import { saveAgentSettings, type AgentSettings } from "@/lib/agent/settings";
 import { FetchError } from "@/lib/ingest/fetcher";
 
 /** Errors we can show to the editor verbatim. Everything else gets a generic message. */
@@ -402,5 +404,40 @@ export async function socialImportAction(formData: FormData) {
     }
     const r = await importSocialPosts(payload, actor);
     return `Imported ${r.imported} post${r.imported === 1 ? "" : "s"} (${r.itemsNew} new) into the inbox as unverified.`;
+  });
+}
+
+// ---------------------------------------------------------------- news agent
+
+export async function saveAgentSettingsAction(formData: FormData) {
+  return guarded(formData, "/admin/agent", async (actor) => {
+    const num = (k: string) => Number(str(formData, k));
+    const next = await saveAgentSettings({
+      enabled: formData.get("enabled") === "on",
+      autoPublish: formData.get("autoPublish") === "on",
+      autoSend: formData.get("autoSend") === "on",
+      sendWeekday: num("sendWeekday"),
+      sendHourUtc: num("sendHourUtc"),
+      minRelevance: num("minRelevance"),
+      lookbackDays: num("lookbackDays"),
+      maxStoriesPerRun: num("maxStoriesPerRun"),
+      maxStoriesPerIssue: num("maxStoriesPerIssue"),
+      minStoriesPerIssue: num("minStoriesPerIssue"),
+      trustLevels: formData.getAll("trustLevels").map(String) as AgentSettings["trustLevels"],
+    });
+    await audit(actor, "agent.settings", "agent", null, { ...next });
+    return "News agent settings saved.";
+  });
+}
+
+export async function runAgentAction(formData: FormData) {
+  const dryRun = formData.get("dryRun") === "yes";
+  return guarded(formData, "/admin/agent", async () => {
+    const r = await runAgent({ trigger: "manual", dryRun });
+    if (r.status === "skipped") throw new WorkflowError(r.log[0]?.msg ?? "Run skipped.");
+    if (r.status === "failed") throw new WorkflowError(r.log.at(-1)?.msg ?? "Run failed.");
+    return dryRun
+      ? `Dry run finished: ${r.candidates} topic(s) found. Nothing was written or sent; see the log below.`
+      : `Run finished: ${r.storiesPublished} published, ${r.storiesCreated} written, ${r.itemsLinked} linked to existing stories${r.issueId ? ", weekly issue queued" : ""}.`;
   });
 }

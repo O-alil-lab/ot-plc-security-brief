@@ -6,14 +6,18 @@
  * Uses the database as the queue (FetchRun / NewsletterDelivery rows), so a
  * crashed worker resumes where it left off. Run exactly one worker instance.
  */
+// Load .env like the web app does (APP_SECRET, email settings, proxy, ...).
+import "dotenv/config";
 import { prisma } from "../src/lib/db";
 import { runDueSources } from "../src/lib/ingest/ingest";
 import { processSending } from "../src/lib/newsletter/send";
 import { syncKev } from "../src/lib/kev";
+import { runAgent } from "../src/lib/agent/agent";
 
 const INGEST_EVERY_MS = 5 * 60_000; // check for due sources every 5 min
 const SEND_EVERY_MS = 15_000;
 const KEV_EVERY_MS = 12 * 3600_000;
+const AGENT_EVERY_MS = 60 * 60_000; // news agent: fetch newest, write, publish, weekly send
 
 let stopping = false;
 
@@ -38,6 +42,13 @@ async function kevTick() {
   }
 }
 
+async function agentTick() {
+  const r = await runAgent({ trigger: "schedule" });
+  if (r.status === "skipped") return;
+  console.info(`[worker] news agent ${r.status}: ${r.storiesPublished} published, ${r.storiesCreated} written, ${r.itemsLinked} linked${r.issueId ? ", weekly issue queued" : ""}`);
+  for (const l of r.log.filter((x) => x.level === "warn")) console.warn(`[agent] ${l.msg}`);
+}
+
 function every(ms: number, fn: () => Promise<void>, name: string) {
   let running = false;
   const tick = async () => {
@@ -58,11 +69,12 @@ function every(ms: number, fn: () => Promise<void>, name: string) {
 async function main() {
   if (process.argv.includes("--once")) {
     await ingestTick();
+    await agentTick();
     await sendTick();
     return;
   }
   console.info("[worker] started");
-  const timers = [every(INGEST_EVERY_MS, ingestTick, "ingest"), every(SEND_EVERY_MS, sendTick, "send"), every(KEV_EVERY_MS, kevTick, "kev")];
+  const timers = [every(INGEST_EVERY_MS, ingestTick, "ingest"), every(SEND_EVERY_MS, sendTick, "send"), every(KEV_EVERY_MS, kevTick, "kev"), every(AGENT_EVERY_MS, agentTick, "agent")];
   const stop = async () => {
     stopping = true;
     timers.forEach(clearInterval);

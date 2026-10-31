@@ -35,6 +35,8 @@ const ID_PATTERNS: RegExp[] = [
   /\bFG-IR-\d{2}-\d{3,4}\b/gi,
   /\bPAN-SA-\d{4}-\d{4}\b/gi,
   /\bAA\d{2}-\d{3}[A-Z]?\b/g,
+  /\bVDE-\d{4}-\d{3,5}\b/gi,
+  /\bMPSA-\d{4,7}\b/gi,
 ];
 
 /** Extract CVE and advisory identifiers. These are signals, not proof of identity. */

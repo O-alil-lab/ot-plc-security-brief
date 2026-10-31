@@ -64,6 +64,19 @@ The end-to-end flow covers:
   - 6 e2e tests pass, including review, typed confirmation and the worker sending an issue;
   - lint, typecheck and production build pass.
 
+## News agent (2026-10-31)
+
+- **Added:** an automatic news agent: fetch → select → group → write (AI, validated against the source) → publish → weekly send. It has an admin page with settings, a dry run, run history and an off switch, and runs hourly from the worker and from `/api/cron`.
+- **Added:** 3 official vendor feeds (CERT@VDE, Moxa, Mitsubishi Electric PSIRT), taken from links on the vendors' own sites and live-tested.
+- **Fixed:** the worker didn't load `.env`. In local mode, newsletter unsubscribe links were signed with a fallback key the website rejects. The worker and scripts now load `.env`, and `dotenv` is a runtime dependency.
+- **Live check against real feeds:**
+  - 20 sources fetched and 745 new items collected; the Fortinet feed had a network reset, which was recorded as a failure.
+  - 8 real advisories were published. The Siemens SSA and the CISA ICSA for the same Mendix issue were merged into one story.
+  - Text-cleaning fixes came out of this check: CISA's "View CSAF Summary" prefix, Siemens title prefixes, cutting at sentence boundaries, and naming the vendor in headlines that start with CVE IDs.
+- **Tests:** 153 unit and integration tests pass (16 new for the agent, including fake-AI hallucination and failure cases); 7 e2e tests pass; the page sweep is clean.
+- **Not exercised:** a live Anthropic API call, because no key is available in the build environment. The parsing and validation of AI output are covered by tests.
+- **Audit:** production dependencies have 0 vulnerabilities. One moderate advisory affects `minimatch`, which ESLint uses (development only); the fix requires a breaking ESLint change.
+
 ## Integration status
 
 | Integration | Status |

@@ -2,9 +2,11 @@ import { prisma } from "./db";
 import { runDueSources, type RunResult } from "./ingest/ingest";
 import { processSending } from "./newsletter/send";
 import { syncKev } from "./kev";
+import { runAgent } from "./agent/agent";
 
 export type CronSummary = {
   sources: { status: RunResult["status"]; itemsNew: number; itemsUpdated: number }[];
+  agent: { status: string; storiesPublished: number; issueQueued: boolean };
   deliveriesAttempted: number;
   kev: string;
   ms: number;
@@ -21,6 +23,8 @@ const KEV_EVERY_MS = 12 * 3600_000;
 export async function runCronTick(opts: { maxSources?: number; sendBudgetMs?: number } = {}): Promise<CronSummary> {
   const started = Date.now();
   const results = await runDueSources(new Date(), 3, opts.maxSources ?? 8);
+
+  const agentRun = await runAgent({ trigger: "cron", skipFetch: true });
 
   let deliveriesAttempted = 0;
   const sendDeadline = Date.now() + (opts.sendBudgetMs ?? 120_000);
@@ -43,6 +47,7 @@ export async function runCronTick(opts: { maxSources?: number; sendBudgetMs?: nu
 
   return {
     sources: results.map((r) => ({ status: r.status, itemsNew: r.itemsNew, itemsUpdated: r.itemsUpdated })),
+    agent: { status: agentRun.status, storiesPublished: agentRun.storiesPublished, issueQueued: !!agentRun.issueId },
     deliveriesAttempted,
     kev,
     ms: Date.now() - started,
