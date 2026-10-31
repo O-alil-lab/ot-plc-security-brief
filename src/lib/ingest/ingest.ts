@@ -1,4 +1,4 @@
-import type { CollectedItem, FetchStatus, Prisma, Source } from "@prisma/client";
+import { Prisma, type CollectedItem, type FetchStatus, type Source } from "@prisma/client";
 import { prisma } from "../db";
 import { safeFetch, FetchError, type SafeFetchOptions } from "./fetcher";
 import { parseFeed, FeedParseError, type ParsedItem } from "./parse";
@@ -86,73 +86,83 @@ export async function upsertItems(source: Source, parsed: ParsedItem[], now = ne
       now,
     });
 
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.collectedItem.findUnique({ where: { sourceId_guid: { sourceId: source.id, guid: p.guid } } });
-      if (existing) {
-        if (existing.contentHash === hash) return;
-        await tx.itemRevision.create({
-          data: { itemId: existing.id, previousTitle: existing.title, previousExcerpt: existing.excerpt, previousHash: existing.contentHash },
-        });
-        await tx.collectedItem.update({
-          where: { id: existing.id },
+    let outcome = "same" as "new" | "updated" | "same";
+    try {
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.collectedItem.findUnique({ where: { sourceId_guid: { sourceId: source.id, guid: p.guid } } });
+        if (existing) {
+          if (existing.contentHash === hash) return;
+          await tx.itemRevision.create({
+            data: { itemId: existing.id, previousTitle: existing.title, previousExcerpt: existing.excerpt, previousHash: existing.contentHash },
+          });
+          await tx.collectedItem.update({
+            where: { id: existing.id },
+            data: {
+              title: p.title,
+              excerpt: p.excerpt,
+              url: p.url,
+              canonicalUrl: normalizeUrl(p.url),
+              sourceUpdatedAt: p.sourceUpdatedAt ?? now,
+              contentHash: hash,
+              extractedIds: ids,
+              relevanceScore: relevance.total,
+              relevanceBreakdown: relevance as unknown as Prisma.InputJsonValue,
+              // Bring updated items back to the editor's attention unless rejected.
+              inboxStatus: existing.inboxStatus === "rejected" ? "rejected" : existing.inboxStatus === "used" ? "used" : "new",
+            },
+          });
+          outcome = "updated";
+          return;
+        }
+
+        const created = await tx.collectedItem.create({
           data: {
-            title: p.title,
-            excerpt: p.excerpt,
+            sourceId: source.id,
+            guid: p.guid,
             url: p.url,
             canonicalUrl: normalizeUrl(p.url),
-            sourceUpdatedAt: p.sourceUpdatedAt ?? now,
+            title: p.title,
+            excerpt: p.excerpt,
+            author: p.author,
+            publishedAt: p.publishedAt,
+            sourceUpdatedAt: p.sourceUpdatedAt,
             contentHash: hash,
             extractedIds: ids,
             relevanceScore: relevance.total,
             relevanceBreakdown: relevance as unknown as Prisma.InputJsonValue,
-            // Bring updated items back to the editor's attention unless rejected.
-            inboxStatus: existing.inboxStatus === "rejected" ? "rejected" : existing.inboxStatus === "used" ? "used" : "new",
+            isDemo: source.isDemo,
+            // Old back-catalogue entries (e.g. a vendor feed's full history) are kept
+            // for search and deduplication but don't flood the review queue.
+            inboxStatus: p.publishedAt && now.getTime() - p.publishedAt.getTime() > BACKLOG_DAYS * 86_400_000 && !source.isDemo ? "archived" : "new",
           },
         });
-        itemsUpdated++;
-        return;
-      }
+        outcome = "new";
 
-      const created = await tx.collectedItem.create({
-        data: {
-          sourceId: source.id,
-          guid: p.guid,
-          url: p.url,
-          canonicalUrl: normalizeUrl(p.url),
-          title: p.title,
-          excerpt: p.excerpt,
-          author: p.author,
-          publishedAt: p.publishedAt,
-          sourceUpdatedAt: p.sourceUpdatedAt,
-          contentHash: hash,
-          extractedIds: ids,
-          relevanceScore: relevance.total,
-          relevanceBreakdown: relevance as unknown as Prisma.InputJsonValue,
-          isDemo: source.isDemo,
-          // Old back-catalogue entries (e.g. a vendor feed's full history) are kept
-          // for search and deduplication but don't flood the review queue.
-          inboxStatus: p.publishedAt && now.getTime() - p.publishedAt.getTime() > BACKLOG_DAYS * 86_400_000 && !source.isDemo ? "archived" : "new",
-        },
-      });
-      itemsNew++;
-
-      const { match, reason, suggestions } = await findDuplicateCandidate(tx, created);
-      let groupId: string | null = null;
-      if (match && reason) {
-        groupId = match.duplicateGroupId;
-        if (!groupId) {
-          const g = await tx.duplicateGroup.create({ data: { reason } });
-          groupId = g.id;
-          await tx.collectedItem.update({ where: { id: match.id }, data: { duplicateGroupId: groupId } });
+        const { match, reason, suggestions } = await findDuplicateCandidate(tx, created);
+        let groupId: string | null = null;
+        if (match && reason) {
+          groupId = match.duplicateGroupId;
+          if (!groupId) {
+            const g = await tx.duplicateGroup.create({ data: { reason } });
+            groupId = g.id;
+            await tx.collectedItem.update({ where: { id: match.id }, data: { duplicateGroupId: groupId } });
+          }
         }
-      }
-      if (groupId || suggestions.length) {
-        await tx.collectedItem.update({
-          where: { id: created.id },
-          data: { duplicateGroupId: groupId, suggestedGroupIds: suggestions },
-        });
-      }
-    });
+        if (groupId || suggestions.length) {
+          await tx.collectedItem.update({
+            where: { id: created.id },
+            data: { duplicateGroupId: groupId, suggestedGroupIds: suggestions },
+          });
+        }
+      });
+    } catch (e) {
+      // Another process (e.g. the news agent and the scheduled check fetching the
+      // same feed at once) stored this item first. That is not a failure.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      throw e;
+    }
+    if (outcome === "new") itemsNew++;
+    else if (outcome === "updated") itemsUpdated++;
   }
   return { itemsNew, itemsUpdated };
 }
@@ -203,8 +213,7 @@ export async function runSource(
     await prisma.source.update({ where: { id: sourceId }, data: { etag: res.etag ?? null, lastModified: res.lastModified ?? null } });
   } catch (e) {
     if (e instanceof FetchError) {
-      const status: FetchStatus =
-        e.kind === "http_error" && (e.httpStatus === 401 || e.httpStatus === 403 || e.httpStatus === 429) ? "blocked" : e.kind;
+      const status: FetchStatus = e.kind === "http_error" && (e.httpStatus === 401 || e.httpStatus === 403 || e.httpStatus === 429) ? "blocked" : e.kind;
       return fail(status, e.message, e.httpStatus);
     }
     return fail("network_error", (e as Error).message);

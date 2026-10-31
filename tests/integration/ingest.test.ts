@@ -64,6 +64,14 @@ describe("ingestion", () => {
     expect(nextDueAt({ ...base, consecutiveFailures: 20 }).toISOString()).toBe("2026-01-02T00:00:00.000Z");
   });
 
+  it("stores each item once when two fetches of the same feed overlap", async () => {
+    const s = await makeSource();
+    const items = Array.from({ length: 5 }, (_, i) => ({ guid: `c${i}`, url: `https://x.example/c${i}`, title: `Advisory number ${i} for controller firmware`, excerpt: `text ${i}`, author: null, publishedAt: new Date(), sourceUpdatedAt: null }));
+    const [a, b] = await Promise.all([upsertItems(s, items), upsertItems(s, items)]);
+    expect(a.itemsNew + b.itemsNew).toBe(5);
+    expect(await prisma.collectedItem.count({ where: { sourceId: s.id } })).toBe(5);
+  });
+
   it("deduplicates by GUID and records updates as revisions", async () => {
     const s = await makeSource();
     const item = { guid: "g1", url: "https://x.example/1", title: "Original title", excerpt: "v1", author: null, publishedAt: new Date(), sourceUpdatedAt: null };
