@@ -14,7 +14,7 @@
 // Load .env like the web app does (APP_SECRET, email settings, proxy, ...).
 import "dotenv/config";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -88,6 +88,52 @@ async function ensureUtf8Databases(pg: EmbeddedPostgres): Promise<Set<string>> {
     await client.end();
   }
   return created;
+}
+
+/**
+ * Find web server / worker processes of THIS project left running by an earlier
+ * session (e.g. a window that was closed before this fix). Only Node processes
+ * whose command line points into this project's folder and runs the Next server
+ * or the worker are returned.
+ */
+function findLeftoverAppProcesses(): number[] {
+  const root = ROOT.toLowerCase().replace(/\\/g, "/");
+  const isApp = (cmd: string) => {
+    const c = cmd.toLowerCase().replace(/\\/g, "/");
+    return c.includes(root) && /(next\/dist\/bin\/next"?\s+(start|dev)|scripts\/worker\.ts|scripts\/guard\.cjs|\.bin\/next"?\s+(start|dev)|next\/dist\/server\/lib\/start-server)/.test(c);
+  };
+  const procs: { pid: number; cmd: string }[] = [];
+  if (isWin) {
+    const r = spawnSync(
+      "powershell",
+      ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"],
+      { encoding: "utf8", timeout: 20_000 },
+    );
+    try {
+      const parsed = JSON.parse(r.stdout || "[]") as { ProcessId: number; CommandLine: string | null } | { ProcessId: number; CommandLine: string | null }[];
+      for (const p of Array.isArray(parsed) ? parsed : [parsed]) if (p.CommandLine) procs.push({ pid: p.ProcessId, cmd: p.CommandLine });
+    } catch {
+      return [];
+    }
+  } else {
+    const r = spawnSync("ps", ["-eo", "pid=,args="], { encoding: "utf8" });
+    for (const line of (r.stdout ?? "").split("\n")) {
+      const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+      if (!m) continue;
+      let cmd = m[2];
+      // Next renames its process to "next-server (vX)", hiding the command line
+      // on Linux; identify it by its working folder instead.
+      if (/^next-server\b/.test(cmd)) {
+        try {
+          if (realpathSync(`/proc/${m[1]}/cwd`) === realpathSync(ROOT)) cmd = `${ROOT}/node_modules/next/dist/bin/next start`;
+        } catch {
+          /* not ours or not readable */
+        }
+      }
+      procs.push({ pid: Number(m[1]), cmd });
+    }
+  }
+  return procs.filter((p) => p.pid !== process.pid && p.pid !== process.ppid && isApp(p.cmd)).map((p) => p.pid);
 }
 
 /** True only if `pid` is a running PostgreSQL server process (never touch anything else). */
@@ -165,6 +211,18 @@ function ensureEnvFile() {
 
 async function main() {
   mkdirSync(LOCAL, { recursive: true });
+  const leftovers = findLeftoverAppProcesses();
+  if (leftovers.length) {
+    log(`Stopping ${leftovers.length} process(es) of this app left running by an earlier session...`);
+    for (const pid of leftovers) {
+      try {
+        process.kill(pid);
+      } catch {
+        /* already gone */
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
   for (let port = PREFERRED_PORT; port < PREFERRED_PORT + 20; port++) {
     if (await portIsFree(port)) {
       APP_PORT = port;
@@ -213,15 +271,15 @@ async function main() {
     if (stopping) return;
     stopping = true;
     log("Stopping...");
+    // Children are plain Node processes (no shell layers), so ending them directly
+    // stops everything; any process they started exits via exit-with-parent.cjs.
     for (const c of children) {
-      if (c.pid && !c.killed) {
-        if (isWin) spawnSync("taskkill", ["/pid", String(c.pid), "/T", "/F"], { stdio: "ignore" });
-        else {
-          try {
-            process.kill(-c.pid, "SIGTERM"); // whole process group (npx -> next/tsx -> children)
-          } catch {
-            c.kill("SIGTERM");
-          }
+      if (c.pid && c.exitCode === null) {
+        try {
+          if (isWin) process.kill(c.pid);
+          else process.kill(-c.pid, "SIGTERM"); // its process group
+        } catch {
+          /* already gone */
         }
       }
     }
@@ -292,20 +350,23 @@ async function main() {
   }
 
   log(`Starting the web app${DEV_MODE ? " in development mode" : ""} on http://localhost:${APP_PORT} and the background worker...`);
-  // Each child runs under scripts/guard.cjs, which ends it (and everything it
-  // started) if this launcher disappears, e.g. when its window is closed.
-  // On macOS/Linux each guard gets its own process group so stop() can end it too.
-  const guarded = (args: string[], extraEnv: Record<string, string> = {}) =>
-    spawn(process.execPath, [join(ROOT, "scripts", "guard.cjs"), String(process.pid), "npx", ...args], {
-      cwd: ROOT,
-      env: { ...env, ...extraEnv },
-      stdio: "inherit",
-      detached: !isWin,
-    });
+  // Web server and worker run as plain Node processes (no cmd/npx layers) with
+  // scripts/exit-with-parent.cjs preloaded through NODE_OPTIONS, so they, and any
+  // Node process they start, exit by themselves if this launcher disappears
+  // (for example when its window is closed on Windows).
+  const childEnv = (extra: Record<string, string> = {}) => ({
+    ...env,
+    ...extra,
+    LOCAL_PARENT_PID: String(process.pid),
+    NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(join(ROOT, "scripts", "exit-with-parent.cjs"))}`.trim(),
+  });
+  const nextBin = join(ROOT, "node_modules", "next", "dist", "bin", "next");
+  const node = (args: string[], extra?: Record<string, string>) =>
+    spawn(process.execPath, args, { cwd: ROOT, env: childEnv(extra), stdio: "inherit", detached: !isWin });
   const web = DEV_MODE
-    ? guarded(["next", "dev", "-p", String(APP_PORT)])
-    : guarded(["next", "start", "-p", String(APP_PORT)], { NODE_ENV: "production" });
-  const worker = guarded(["tsx", "scripts/worker.ts"]);
+    ? node([nextBin, "dev", "-p", String(APP_PORT)])
+    : node([nextBin, "start", "-p", String(APP_PORT)], { NODE_ENV: "production" });
+  const worker = node(["--import", "tsx", join(ROOT, "scripts", "worker.ts")]);
   children.push(web, worker);
   web.on("exit", (code) => {
     if (!stopping) {

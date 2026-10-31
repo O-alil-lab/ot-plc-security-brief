@@ -73,8 +73,14 @@ The end-to-end flow covers:
   - 20 sources fetched and 745 new items collected; the Fortinet feed had a network reset, which was recorded as a failure.
   - 8 real advisories were published. The Siemens SSA and the CISA ICSA for the same Mendix issue were merged into one story.
   - Text-cleaning fixes came out of this check: CISA's "View CSAF Summary" prefix, Siemens title prefixes, cutting at sentence boundaries, and naming the vendor in headlines that start with CVE IDs.
-- **Tests:** 153 unit and integration tests pass (16 new for the agent, including fake-AI hallucination and failure cases); 7 e2e tests pass; the page sweep is clean.
+- **Tests:** 154 unit and integration tests pass (17 new for the agent, including fake-AI hallucination and failure cases); 7 e2e tests pass; the page sweep is clean.
 - **Fixed (Windows):** the bundled PostgreSQL followed the Windows system locale and created WIN1252 databases, so advisories containing characters outside WIN1252 (e.g. "†") failed to save (error 22P05). New installs now use `--encoding=UTF8 --locale=C`. Existing non-UTF-8 databases are kept as renamed backups and replaced with UTF-8 ones; demo data and the same admin sign-in are restored. Verified against a simulated WIN1252 install and a fresh install.
+- **Fixed (Windows, second attempt):** closing the window still left the web server and worker running. The probable cause is that, while a console window closes, Windows won't let processes start new programs, and the guard relied on starting `taskkill`. Changes:
+  - The web server and worker now run as plain Node processes (no `cmd`/`npx` layers).
+  - Each preloads `scripts/exit-with-parent.cjs` through `NODE_OPTIONS` and exits by itself when the launcher is gone; no external program is needed.
+  - At start, the launcher finds this project's server or worker processes left from an earlier session and stops them. It matches on command line or working folder, and only for processes inside this project's folder.
+  - Verified by hard-killing the launcher (children exit within 5 s) and by starting with a leftover server on the port (it is stopped and the port reused).
+- **Changed:** a dry run may run while a real run is in progress; a second real run is refused with a clear message.
 - **Not exercised:** a live Anthropic API call, because no key is available in the build environment. The parsing and validation of AI output are covered by tests.
 - **Audit:** production dependencies have 0 vulnerabilities. One moderate advisory affects `minimatch`, which ESLint uses (development only); the fix requires a breaking ESLint change.
 

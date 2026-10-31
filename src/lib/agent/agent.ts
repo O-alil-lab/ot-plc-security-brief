@@ -302,9 +302,9 @@ export async function runAgent(opts: AgentRunOptions = {}): Promise<AgentRunSumm
     return { runId: null, status: "skipped", ...empty, log: [{ at: now.toISOString(), level: "info", msg: "Agent is switched off" }] };
   }
 
-  // Only one run at a time.
-  const running = await prisma.agentRun.findFirst({ where: { status: "running", startedAt: { gte: new Date(Date.now() - 30 * 60_000) } } });
-  if (running) return { runId: null, status: "skipped", ...empty, log: [{ at: now.toISOString(), level: "info", msg: "Another run is in progress" }] };
+  // Only one real run at a time (a dry run changes nothing, so it may overlap).
+  const running = dryRun ? null : await prisma.agentRun.findFirst({ where: { status: "running", dryRun: false, startedAt: { gte: new Date(Date.now() - 30 * 60_000) } } });
+  if (running) return { runId: null, status: "skipped", ...empty, log: [{ at: now.toISOString(), level: "info", msg: "The agent is already running; check back in a few minutes" }] };
 
   const run = await prisma.agentRun.create({ data: { trigger: opts.trigger ?? "schedule", dryRun } });
   const totals = { ...empty } as Omit<AgentRunSummary, "runId" | "status" | "log">;

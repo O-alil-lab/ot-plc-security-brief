@@ -190,6 +190,15 @@ describe("news agent", () => {
     expect(s._count.sources).toBe(2);
   });
 
+  it("allows a dry run while a real run is in progress, but not a second real run", async () => {
+    await seedItems();
+    await prisma.agentRun.create({ data: { status: "running", trigger: "schedule" } });
+    expect((await runAgent({ trigger: "manual", dryRun: true, now: NOW, skipFetch: true })).status).toBe("ok");
+    const second = await runAgent({ trigger: "manual", now: NOW, skipFetch: true });
+    expect(second.status).toBe("skipped");
+    expect(second.log[0].msg).toMatch(/already running/);
+  });
+
   it("drafts only when auto-publish is off", async () => {
     await seedItems();
     await saveAgentSettings({ autoPublish: false, autoSend: false });
