@@ -14,7 +14,7 @@
 // Load .env like the web app does (APP_SECRET, email settings, proxy, ...).
 import "dotenv/config";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
@@ -172,6 +172,15 @@ function buildIsCurrent(): boolean {
 }
 
 const log = (msg: string) => console.log(`\x1b[36m[local]\x1b[0m ${msg}`);
+/** Shutdown events are also written to .local/shutdown.log, to diagnose leftovers. */
+const SHUTDOWN_LOG = join(LOCAL, "shutdown.log");
+const note = (msg: string) => {
+  try {
+    appendFileSync(SHUTDOWN_LOG, `${new Date().toISOString()} launcher ${process.pid}: ${msg}\n`);
+  } catch {
+    /* best effort */
+  }
+};
 
 /** Windows needs a shell to find npx.cmd; pass one command string there (avoids Node's DEP0190 warning). */
 function spawnArgs(cmd: string, args: string[]): [string, string[]] {
@@ -270,6 +279,7 @@ async function main() {
   const stop = async (code = 0) => {
     if (stopping) return;
     stopping = true;
+    note(`stopping (exit code ${code})`);
     log("Stopping...");
     // Children are plain Node processes (no shell layers), so ending them directly
     // stops everything; any process they started exits via exit-with-parent.cjs.
@@ -290,7 +300,10 @@ async function main() {
   // SIGHUP/SIGBREAK: the console window was closed (Windows) or the terminal went away.
   for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) {
     try {
-      process.on(sig, () => void stop());
+      process.on(sig, () => {
+        note(`received ${sig}`);
+        void stop();
+      });
     } catch {
       /* signal not supported on this platform */
     }
@@ -358,16 +371,18 @@ async function main() {
     ...env,
     ...extra,
     LOCAL_PARENT_PID: String(process.pid),
+    LOCAL_SHUTDOWN_LOG: SHUTDOWN_LOG,
     NODE_OPTIONS: `${env.NODE_OPTIONS ?? ""} --require ${JSON.stringify(join(ROOT, "scripts", "exit-with-parent.cjs"))}`.trim(),
   });
   const nextBin = join(ROOT, "node_modules", "next", "dist", "bin", "next");
   const node = (args: string[], extra?: Record<string, string>) =>
-    spawn(process.execPath, args, { cwd: ROOT, env: childEnv(extra), stdio: "inherit", detached: !isWin });
+    spawn(process.execPath, args, { cwd: ROOT, env: childEnv(extra), stdio: ["inherit", "inherit", "inherit", "ipc"], detached: !isWin });
   const web = DEV_MODE
     ? node([nextBin, "dev", "-p", String(APP_PORT)])
     : node([nextBin, "start", "-p", String(APP_PORT)], { NODE_ENV: "production" });
   const worker = node(["--import", "tsx", join(ROOT, "scripts", "worker.ts")]);
   children.push(web, worker);
+  note(`started web ${web.pid} and worker ${worker.pid}`);
   web.on("exit", (code) => {
     if (!stopping) {
       log(`Web app exited (code ${code}).`);
