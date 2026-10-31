@@ -33,7 +33,7 @@ export default async function HomePage() {
           </div>
           <div className="rounded-lg border border-line bg-white p-5">
             <h2 className="text-xl font-semibold">Get the weekly brief</h2>
-            <p className="mb-4 mt-1 text-sm text-slate">One email a week. Every story is reviewed by an editor before it is sent.</p>
+            <p className="mb-4 mt-1 text-sm text-slate">One email a week. Every story links to the original advisory; stories labelled “Auto-generated” are written automatically and not editor-reviewed.</p>
             <SignupForm compact />
           </div>
         </div>
@@ -46,7 +46,7 @@ export default async function HomePage() {
             <Link href="/feed" className="text-sm">All stories</Link>
           </div>
           {stories.length === 0 ? (
-            <p className="border-t border-line py-8 text-slate">No stories have been published yet. Editors publish stories after checking them against original sources.</p>
+            <p className="border-t border-line py-8 text-slate">No stories have been published yet.</p>
           ) : (
             stories.map((s) => <StoryRow key={s.id} story={s} />)
           )}
